@@ -10,7 +10,7 @@ Supported services:
   - reboot the Freebox Server
 
 ###### Dependancies:
-python-requests and python-simple-json.  
+python-requests and python-simplejson.  
 You can use this command to install them:  
-> apt-get install python-requests python-simple-json
+> apt-get install python-requests python-simplejson
 
