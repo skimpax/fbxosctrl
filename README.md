@@ -9,7 +9,7 @@ Free is a French DSL operator (free.fr) providing two set-top-box :
   * Freebox Player, connected to the TV
 
 This tool applies to the server box of Freebox v6 (aka Freebox Revolution) only with latest firmware (v2.X).
-FreeboxOS is the name given bt Free.fr to software running inside their Freebox Server.
+FreeboxOS is the name given by Free.fr to their software running inside the Freebox Server.
 
 Supported services:
   - set wifi ON
