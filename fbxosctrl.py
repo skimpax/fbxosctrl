@@ -54,7 +54,7 @@ gVerbose = False
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "1.0.0"
+FBXOSCTRL_VERSION = "1.0.1"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2013, Christophe Lherieau"
@@ -112,7 +112,6 @@ class FreeboxOSCtrl:
         self.challenge = None
         self.sessionToken = None
         self.permissions = None
-        self._loadRegistrationParams()
 
     def _saveRegistrationParams(self):
         """ Save registration parameters (app_id/token) to a local file """
@@ -121,7 +120,7 @@ class FreeboxOSCtrl:
             json.dump(self.registration, outfile)
 
     def _loadRegistrationParams(self):
-        log(">>> _loadRegistrationParams")
+        log(">>> _loadRegistrationParams: file: %s" % self.registrationSaveFile)
         if os.path.exists(self.registrationSaveFile):
             with open(self.registrationSaveFile) as infile:
                 self.registration = json.load(infile)
@@ -145,15 +144,15 @@ class FreeboxOSCtrl:
             # rc is 200 but did we really succeed?
             resp = json.loads(r.text)
             #log("Obj resp: %s" % resp)
-            if resp['success']:
-                if not resp['result']['logged_in']:
-                    self.challenge = resp['result']['challenge']
+            if resp.get('success'):
+                if not resp.get('result').get('logged_in'):
+                    self.challenge = resp.get('result').get('challenge')
             else:
                 raise FbxOSException("Challenge failure: %s" % resp)
 
             # 2nd stage: open a session
             global gAppDesc
-            apptoken = self.registration['app_token']
+            apptoken = self.registration.get('app_token')
             key = self.challenge
             log("challenge: " + key + ", apptoken: " + apptoken)
             # Hashing token with key
@@ -162,7 +161,7 @@ class FreeboxOSCtrl:
             url = self.fbxAddress + "/api/v1/login/session/"
             headers = {'Content-type': 'application/json',
                        'charset': 'utf-8', 'Accept': 'text/plain'}
-            payload = {'app_id': gAppDesc['app_id'], 'password': password}
+            payload = {'app_id': gAppDesc.get('app_id'), 'password': password}
             #log("Payload: %s" % payload)
             data = json.dumps(payload)
             log("POST url: %s  data: %s" % (url, data))
@@ -175,11 +174,11 @@ class FreeboxOSCtrl:
             # rc is 200 but did we really succeed?
             resp = json.loads(r.text)
             #log("Obj resp: %s" % resp)
-            if resp['success']:
-                self.sessionToken = resp['result']['session_token']
-                self.permissions = resp['result']['permissions']
+            if resp.get('success'):
+                self.sessionToken = resp.get('result').get('session_token')
+                self.permissions = resp.get('result').get('permissions')
                 log("Permissions: %s" % self.permissions)
-                if not self.permissions['settings']:
+                if not self.permissions.get('settings'):
                     print "Warning: permission 'settings' has not been allowed yet \
                     in FreeboxOS server. This script may fail!"
             else:
@@ -202,7 +201,7 @@ class FreeboxOSCtrl:
             # rc is 200 but did we really succeed?
             resp = json.loads(r.text)
             #log("Obj resp: %s" % resp)
-            if not resp['success']:
+            if not resp.get('success'):
                 raise FbxOSException("Logout failure: %s" % resp)
         self.isLoggedIn = False
 
@@ -239,8 +238,8 @@ class FreeboxOSCtrl:
         resp = json.loads(r.text)
         #log("Obj resp: %s" % resp)
         isOn = False
-        if True == resp['success']:
-            if resp['result']['ap_params']['enabled']:
+        if True == resp.get('success'):
+            if resp.get('result').get('ap_params').get('enabled'):
                 print "Wifi is now ON"
                 isOn = True
             else:
@@ -253,14 +252,18 @@ class FreeboxOSCtrl:
     def hasRegistrationParams(self):
         """ Indicate whether registration params look initialized """
         log(">>> hasRegistrationParams")
-        return None != self.registration['track_id'] and '' != self.registration['app_token']
+        if None != self.registration.get('track_id') and '' != self.registration.get('app_token'):
+            return True
+        else:
+            self._loadRegistrationParams()
+            return None != self.registration.get('track_id') and '' != self.registration.get('app_token')
 
     def getRegistrationStatus(self):
         """ Get the current registration status thanks to the track_id """
         log(">>> getRegistrationStatus")
         if self.hasRegistrationParams():
             url = self.fbxAddress + \
-                "/api/v1/login/authorize/%s" % self.registration['track_id']
+                "/api/v1/login/authorize/%s" % self.registration.get('track_id')
             log(url)
             # GET
             log("GET url: %s" % url)
@@ -270,7 +273,7 @@ class FreeboxOSCtrl:
             if requests.codes.ok != r.status_code:
                 raise FbxOSException("Get error: %s" % r.text)
             resp = json.loads(r.text)
-            return resp['result']['status']
+            return resp.get('result').get('status')
         else:
             return "Not registered yet!"
 
@@ -290,29 +293,30 @@ class FreeboxOSCtrl:
         if self.hasRegistrationParams():
             status = self.getRegistrationStatus()
             if 'granted' == status:
-                print "This app is already granted on Freebox Server (app_id = %s). You can now dialog with it." % self.registration['track_id']
+                print "This app is already granted on Freebox Server (app_id = %s). You can now dialog with it." % self.registration.get('track_id')
                 register = False
             elif 'pending' == status:
-                print "This app grant is still pending: user should grant it on Freebox Server lcd/touchpad (app_id = %s)." % self.registration['track_id']
+                print "This app grant is still pending: user should grant it on Freebox Server lcd/touchpad (app_id = %s)." % self.registration.get('track_id')
                 register = False
             elif 'unknown' == status:
-                print "This app_id (%s) is unknown by Freebox Server: you have to register again to Freebox Server to get a new app_id." % self.registration['track_id']
+                print "This app_id (%s) is unknown by Freebox Server: you have to register again to Freebox Server to get a new app_id." % self.registration.get('track_id')
             elif 'denied' == status:
-                print "This app has been denied by user on Freebox Server (app_id = %s)." % self.registration['track_id']
+                print "This app has been denied by user on Freebox Server (app_id = %s)." % self.registration.get('track_id')
                 register = False
             elif 'timeout' == status:
-                print "Timeout occured for this app_id: you have to register again to Freebox Server to get a new app_id (current app_id = %s)." % self.registration['track_id']
+                print "Timeout occured for this app_id: you have to register again to Freebox Server to get a new app_id (current app_id = %s)." % self.registration.get('track_id')
             else:
                 print "Unexpected response: %s" % status
 
         if register:
             global gAppDesc
             url = self.fbxAddress + "/api/v1/login/authorize/"
+            data = json.dumps(gAppDesc)
             headers = {
                 'Content-type': 'application/json', 'Accept': 'text/plain'}
             # post it
             log("POST url: %s  data: %s" % (url, data))
-            r = requests.post(url, data=json.dumps(gAppDesc), headers=headers, timeout=3)
+            r = requests.post(url, data=data, headers=headers, timeout=3)
             log("POST response: %s" % r.text)
             # ensure status_code is 200, else raise exception
             if requests.codes.ok != r.status_code:
@@ -320,9 +324,9 @@ class FreeboxOSCtrl:
             # rc is 200 but did we really succeed?
             resp = json.loads(r.text)
             #log("Obj resp: %s" % resp)
-            if True == resp['success']:
-                self.registration['app_token'] = resp['result']['app_token']
-                self.registration['track_id'] = resp['result']['track_id']
+            if True == resp.get('success'):
+                self.registration['app_token'] = resp.get('result').get('app_token')
+                self.registration['track_id'] = resp.get('result').get('track_id')
                 self._saveRegistrationParams()
                 print "Now you have to accept this app on your Freebox server: take a look on its lcd screen."
             else:
@@ -344,9 +348,9 @@ class FreeboxOSCtrl:
         # rc is 200 but did we really succeed?
         resp = json.loads(r.text)
         #log("Obj resp: %s" % resp)
-        if not resp['success']:
+        if not resp.get('success'):
             raise FbxOSException("Logout failure: %s" % resp)
-        print "Freebox Server is rebooting"
+        print "Freebox Server is now rebooting."
         self.isLoggedIn = False
         return True
 
@@ -369,8 +373,8 @@ class FreeboxOSCtrl:
         resp = json.loads(r.text)
         #log("Obj resp: %s" % resp)
         isOn = True
-        if True == resp['success']:
-            if resp['result']['active']:
+        if True == resp.get('success'):
+            if resp.get('result').get('active'):
                 print "Wifi is ON"
                 isOn = True
             else:
@@ -407,22 +411,24 @@ class FreeboxOSCli:
             '--version', action='version', version="%(prog)s " + __version__)
         self.parser.add_argument(
             '-v', action='store_true', help='verbose mode')
-        # Real freeboxOS actions
-        group = self.parser.add_mutually_exclusive_group()
-        group.add_argument(
-            '--registerapp', default=argparse.SUPPRESS, action='store_true',
-            help='register this app to FreeboxOS (to be executed only once)')
-        group.add_argument('--wifistatus', default=argparse.SUPPRESS,
-                           action='store_true', help='get current wifi status')
-        group.add_argument(
-            '--wifion', default=argparse.SUPPRESS, action='store_true', help='turn wifi ON')
-        group.add_argument(
-            '--wifioff', default=argparse.SUPPRESS, action='store_true', help='turn wifi OFF')
         self.parser.add_argument(
-            '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox now!')
+            '-c', nargs=1, help='configuration file to store/retrieve FreeboxOS registration parameters')
+        # Real freeboxOS actions
+        group = self.parser.add_mutually_exclusive_group(required=True)
+        group.add_argument(
+            '--regapp', default=argparse.SUPPRESS, action='store_true',
+            help='register this app to FreeboxOS and save result in configuration file (to be executed only once)')
+        group.add_argument('--wifistatus', default=argparse.SUPPRESS,
+                           action='store_true', help='get FreeboxOS current wifi status')
+        group.add_argument(
+            '--wifion', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi ON')
+        group.add_argument(
+            '--wifioff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi OFF')
+        group.add_argument(
+            '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
         # Configure cmd=>callback association
         self.cmdCallbacks = {
-            'registerapp': self.controller.registerApp,
+            'regapp': self.controller.registerApp,
             'wifistatus': self.controller.getWifiStatus,
             'wifion': self.controller.setWifiOn,
             'wifioff': self.controller.setWifiOff,
@@ -433,13 +439,16 @@ class FreeboxOSCli:
         """ Parse the parameters and execute the associated command """
         args = self.parser.parse_args(argv)
         argsdict = vars(args)
-        log("Args dict: %s" % argsdict)
         # Activate verbose mode if requested
-        if True == argsdict['v']:
+        if True == argsdict.get('v'):
             global gVerbose
             gVerbose = True
+        #log("Args dict: %s" % argsdict)
+        if argsdict.get('c'):
+            self.controller.registrationSaveFile = argsdict.get('c')[0]
         # Suppress '-v' command as not a FreeboxOS cmd
         del argsdict['v']
+        del argsdict['c']
         # Let's execute FreeboxOS cmd
         return self.dispatch(argsdict.keys())
 
