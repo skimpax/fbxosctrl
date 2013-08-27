@@ -1,6 +1,9 @@
 fbxosctrl
 =========
 
+Les détails de mise en oeuvre de fbxosctrl sont disponibles sur le wiki : https://github.com/skimpax/fbxosctrl/wiki
+
+
 This command line utility handles some FreeboxOS commands which are sent to a
 freebox server to be executed within FreeboxOS app.
 
