@@ -54,7 +54,7 @@ gVerbose = False
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "1.0.1"
+FBXOSCTRL_VERSION = "1.0.2"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2013, Christophe Lherieau"
@@ -190,10 +190,11 @@ class FreeboxOSCtrl:
         # Not documented yet in the API
         log(">>> _logout")
         if self.isLoggedIn:
+            headers = {'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
             url = self.fbxAddress + "/api/v1/login/logout/"
             # POST
             log("POST url: %s" % url)
-            r = requests.post(url, timeout=3)
+            r = requests.post(url, headers=headers, timeout=3)
             log("POST response: %s" % r.text)
             # ensure status_code is 200, else raise exception
             if requests.codes.ok != r.status_code:
