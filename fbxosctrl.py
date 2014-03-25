@@ -54,7 +54,7 @@ gVerbose = False
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "1.0.2"
+FBXOSCTRL_VERSION = "1.0.3"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2013, Christophe Lherieau"
@@ -155,6 +155,9 @@ class FreeboxOSCtrl:
             apptoken = self.registration.get('app_token')
             key = self.challenge
             log("challenge: " + key + ", apptoken: " + apptoken)
+            # Encode to plain string as some python versions seem disturbed else (cf. issue#2)
+            if type(key) == unicode:
+                key = key.encode()
             # Hashing token with key
             h = hmac.new(apptoken, key, sha1)
             password = h.hexdigest()
