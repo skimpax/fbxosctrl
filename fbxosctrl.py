@@ -3,12 +3,12 @@
 """ This utility handles some FreeboxOS commands which are sent to a
 freebox server to be executed within FreeboxOS app.
 Supported services:
-  - set wifi ON
-  - set wifi OFF
-  - reboot the Freebox Server
+- set wifi ON
+- set wifi OFF
+- reboot the Freebox Server
 
 Note: once granted, this app must have 'settings' permissions set
- to True in FreeboxOS webgui to be able to modify the configuration. """
+to True in FreeboxOS webgui to be able to modify the configuration. """
 
 import sys
 import os
@@ -30,11 +30,11 @@ from hashlib import sha1
 
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 # FreeboxOS API is available here: http://dev.freebox.fr/sdk/os
 
@@ -54,7 +54,7 @@ gVerbose = False
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "1.0.3"
+FBXOSCTRL_VERSION = "1.0.4"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2013, Christophe Lherieau"
@@ -100,7 +100,7 @@ class FbxOSException(Exception):
 class FreeboxOSCtrl:
 
     """ This class handles connection and dialog with FreeboxOS thanks to
-    its exposed REST API """
+its exposed REST API """
 
     def __init__(self, fbxAddress="http://mafreebox.freebox.fr",
                  regSaveFile="fbxosctrl_registration.txt"):
@@ -167,7 +167,7 @@ class FreeboxOSCtrl:
             payload = {'app_id': gAppDesc.get('app_id'), 'password': password}
             #log("Payload: %s" % payload)
             data = json.dumps(payload)
-            log("POST url: %s  data: %s" % (url, data))
+            log("POST url: %s data: %s" % (url, data))
             # post it
             r = requests.post(url, data, headers=headers, timeout=3)
             # ensure status_code is 200, else raise exception
@@ -183,7 +183,7 @@ class FreeboxOSCtrl:
                 log("Permissions: %s" % self.permissions)
                 if not self.permissions.get('settings'):
                     print "Warning: permission 'settings' has not been allowed yet \
-                    in FreeboxOS server. This script may fail!"
+in FreeboxOS server. This script may fail!"
             else:
                 raise FbxOSException("Session failure: %s" % resp)
             self.isLoggedIn = True
@@ -291,7 +291,7 @@ class FreeboxOSCtrl:
 
     def registerApp(self):
         """ Register this app to FreeboxOS to that user grants this apps via Freebox Server
-        LCD screen. This command shall be executed only once. """
+LCD screen. This command shall be executed only once. """
         log(">>> registerApp")
         register = True
         if self.hasRegistrationParams():
@@ -319,7 +319,7 @@ class FreeboxOSCtrl:
             headers = {
                 'Content-type': 'application/json', 'Accept': 'text/plain'}
             # post it
-            log("POST url: %s  data: %s" % (url, data))
+            log("POST url: %s data: %s" % (url, data))
             r = requests.post(url, data=data, headers=headers, timeout=3)
             log("POST response: %s" % r.text)
             # ensure status_code is 200, else raise exception
@@ -399,6 +399,43 @@ class FreeboxOSCtrl:
         log(">>> setWifiOff")
         return self._setWifiStatus(False)
 
+    def getDhcpLeases(self):
+        """ List the DHCP leases on going """
+        log(">>> getDhcpLeases")
+        self._login()
+        # GET wifi status
+        headers = {
+            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
+        url = self.fbxAddress + "/api/v1/dhcp/dynamic_lease/"
+        # GET
+        log("GET url: %s" % url)
+        r = requests.get(url, headers=headers, timeout=1)
+        log("GET response: %s" % r.text)
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxOSException("Get error: %s" % r.text)
+        # rc is 200 but did we really succeed?
+        resp = json.loads(r.text)
+        count=1
+        if True == resp.get('success'):
+            leases = resp.get('result')
+            print "List of reachable leases:"
+            for lease in leases:
+                #print "LEASE: "+str(lease.get('host').get('reachable'))
+                if True == lease.get('host').get('reachable'):
+                    print "  ["+repr(count)+"]: mac: "+lease.get('mac')+", ip: "+lease.get('ip')+", hostname: "+lease.get('hostname')
+                    count += 1
+            count = 1
+            print "List of unreachable leases:"
+            for lease in leases:
+                #print "LEASE: "+str(lease)
+                if True != lease.get('host').get('reachable'):
+                    print "  ["+repr(count)+"]: mac: "+lease.get('mac')+", ip: "+lease.get('ip')+", hostname: "+lease.get('hostname')
+                    count += 1
+        else:
+            raise FbxOSException("Dynamic lease failure: %s" % resp)
+        self._logout()
+        return 0
 
 class FreeboxOSCli:
 
@@ -430,6 +467,8 @@ class FreeboxOSCli:
             '--wifioff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi OFF')
         group.add_argument(
             '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
+        group.add_argument(
+            '--dhcpleases', default=argparse.SUPPRESS, action='store_true', help='display the current DHCP leases info')
         # Configure cmd=>callback association
         self.cmdCallbacks = {
             'regapp': self.controller.registerApp,
@@ -437,6 +476,7 @@ class FreeboxOSCli:
             'wifion': self.controller.setWifiOn,
             'wifioff': self.controller.setWifiOff,
             'reboot': self.controller.reboot,
+            'dhcpleases': self.controller.getDhcpLeases,
         }
 
     def cmdExec(self, argv):
