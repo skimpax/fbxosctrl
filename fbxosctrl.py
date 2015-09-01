@@ -54,7 +54,7 @@ gVerbose = False
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "1.0.4"
+FBXOSCTRL_VERSION = "1.0.5"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2013, Christophe Lherieau"
