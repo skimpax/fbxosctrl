@@ -158,6 +158,9 @@ its exposed REST API """
             # Encode to plain string as some python versions seem disturbed else (cf. issue#2)
             if type(key) == unicode:
                 key = key.encode()
+            # Encode to plain string as some python versions seem disturbed else (cf. issue#3)
+            if type(apptoken) == unicode:
+                apptoken = apptoken.encode()
             # Hashing token with key
             h = hmac.new(apptoken, key, sha1)
             password = h.hexdigest()
