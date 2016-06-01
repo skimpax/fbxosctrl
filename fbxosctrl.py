@@ -5,6 +5,7 @@ freebox server to be executed within FreeboxOS app.
 Supported services:
 - set wifi ON
 - set wifi OFF
+- set wifi auto
 - reboot the Freebox Server
 
 Note: once granted, this app must have 'settings' permissions set
@@ -256,6 +257,44 @@ in FreeboxOS server. This script may fail!"
         self._logout()
         return isOn
 
+    def _setWifiPlanning(self, putOn):
+        """ Utility to activate or deactivate wifi planning mode """
+        log(">>> _setWifiPlanning")
+        self._login()
+        # PUT wifi status
+        headers = {'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
+        if putOn:
+            data = {'use_planning': True}
+        else:
+            data = {'use_planning': False}
+        url = self.fbxAddress + "/api/v3/wifi/planning"
+        log("PUT url: %s data: %s" % (url, json.dumps(data)))
+        # PUT
+        try:
+            r = requests.put(url, data=json.dumps(data), headers=headers, timeout=1)
+            log("PUT response: %s" % r.text)
+        except requests.exceptions.Timeout as timeoutExcept:
+            # Forward timeout exception as should not occur
+            raise timeoutExcept
+        # Response received
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxOSException("Put error: %s" % r.text)
+        # rc is 200 but did we really succeed?
+        resp = json.loads(r.text)
+        #log("Obj resp: %s" % resp)
+        isOn = False
+        if True == resp.get('success'):
+            if resp.get('result').get('use_planning'):
+                print "Wifi planning is now ON"
+                isOn = True
+            else:
+                print "Wifi planning is now OFF"
+        else:
+            raise FbxOSException("Challenge failure: %s" % resp)
+        self._logout()
+        return isOn
+
     def hasRegistrationParams(self):
         """ Indicate whether registration params look initialized """
         log(">>> hasRegistrationParams")
@@ -361,6 +400,47 @@ LCD screen. This command shall be executed only once. """
         self.isLoggedIn = False
         return True
 
+    def getWifiPlanning(self):
+        """ Get the current status of wifi: 1 means planning enabled, 0 means no planning """
+        log(">>> getWifiPlanning")
+        self._login()
+        # GET wifi planning
+        headers = {
+            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
+        url = self.fbxAddress + "/api/v1/wifi/planning"
+        # GET
+        log("GET url: %s" % url)
+        r = requests.get(url, headers=headers, timeout=1)
+        log("GET response: %s" % r.text)
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxOSException("Get error: %s" % r.text)
+        # rc is 200 but did we really succeed?
+        resp = json.loads(r.text)
+        #log("Obj resp: %s" % resp)
+        isOn = True
+        if True == resp.get('success'):
+            if resp.get('result').get('use_planning'):
+                print "Wifi planning is ON"
+                isOn = True
+            else:
+                print "Wifi planning is OFF"
+                isOn = False
+        else:
+            raise FbxOSException("Challenge failure: %s" % resp)
+        self._logout()
+        return isOn
+
+    def setWifiPlanningOn(self):
+        """ Activate (turn-on) wifi planning mode """
+        log(">>> setWifiPlanningOn")
+        return self._setWifiPlanning(True)
+
+    def setWifiPlanningOff(self):
+        """ Deactivate (turn-off) wifi planning mode """
+        log(">>> setWifiPlanningOff")
+        return self._setWifiPlanning(False)
+
     def getWifiStatus(self):
         """ Get the current status of wifi: 1 means ON, 0 means OFF """
         log(">>> getWifiStatus")
@@ -465,9 +545,15 @@ class FreeboxOSCli:
         group.add_argument('--wifistatus', default=argparse.SUPPRESS,
                            action='store_true', help='get FreeboxOS current wifi status')
         group.add_argument(
-            '--wifion', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi ON')
+            '--won', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi ON')
         group.add_argument(
-            '--wifioff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi OFF')
+            '--woff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi OFF')
+        group.add_argument('--wifiplan', default=argparse.SUPPRESS,
+                           action='store_true', help='get FreeboxOS current wifi planning status')
+        group.add_argument(
+            '--wpon', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi planning ON')
+        group.add_argument(
+            '--wpoff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi planning OFF')
         group.add_argument(
             '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
         group.add_argument(
@@ -476,8 +562,11 @@ class FreeboxOSCli:
         self.cmdCallbacks = {
             'regapp': self.controller.registerApp,
             'wifistatus': self.controller.getWifiStatus,
-            'wifion': self.controller.setWifiOn,
-            'wifioff': self.controller.setWifiOff,
+            'woff': self.controller.setWifiOn,
+            'won': self.controller.setWifiOff,
+            'wifiplan': self.controller.getWifiPlanning,
+            'wpon': self.controller.setWifiPlanningOn,
+            'wpoff': self.controller.setWifiPlanningOff,
             'reboot': self.controller.reboot,
             'dhcpleases': self.controller.getDhcpLeases,
         }
