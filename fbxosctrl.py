@@ -542,18 +542,18 @@ class FreeboxOSCli:
         group.add_argument(
             '--regapp', default=argparse.SUPPRESS, action='store_true',
             help='register this app to FreeboxOS and save result in configuration file (to be executed only once)')
-        group.add_argument('--wifistatus', default=argparse.SUPPRESS,
-                           action='store_true', help='get FreeboxOS current wifi status')
+        group.add_argument('--wrstatus', default=argparse.SUPPRESS,
+                           action='store_true', help='get FreeboxOS current Wifi Radio status')
         group.add_argument(
-            '--won', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi ON')
+            '--wron', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Radio ON')
         group.add_argument(
-            '--woff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi OFF')
-        group.add_argument('--wifiplan', default=argparse.SUPPRESS,
-                           action='store_true', help='get FreeboxOS current wifi planning status')
+            '--wroff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Radio OFF')
+        group.add_argument('--wpstatus', default=argparse.SUPPRESS,
+                           action='store_true', help='get FreeboxOS current Wifi Planning status')
         group.add_argument(
-            '--wpon', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi planning ON')
+            '--wpon', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Planning ON')
         group.add_argument(
-            '--wpoff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS wifi planning OFF')
+            '--wpoff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Planning OFF')
         group.add_argument(
             '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
         group.add_argument(
@@ -561,10 +561,10 @@ class FreeboxOSCli:
         # Configure cmd=>callback association
         self.cmdCallbacks = {
             'regapp': self.controller.registerApp,
-            'wifistatus': self.controller.getWifiStatus,
-            'woff': self.controller.setWifiOn,
-            'won': self.controller.setWifiOff,
-            'wifiplan': self.controller.getWifiPlanning,
+            'wrstatus': self.controller.getWifiStatus,
+            'wron': self.controller.setWifiOn,
+            'wroff': self.controller.setWifiOff,
+            'wpstatus': self.controller.getWifiPlanning,
             'wpon': self.controller.setWifiPlanningOn,
             'wpoff': self.controller.setWifiPlanningOff,
             'reboot': self.controller.reboot,
