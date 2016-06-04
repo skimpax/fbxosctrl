@@ -33,7 +33,7 @@ You can use this command to install them:
 
 ```bash
 usage: fbxosctrl.py [-h] [--version] [-v] [-c C]
-                    (--regapp | --wrtatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --reboot | --dhcpleases)
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --reboot | --dhcpleases)
 
 Command line utility to control some FreeboxOS services.
 
@@ -45,7 +45,7 @@ optional arguments:
                 parameters
   --regapp      register this app to FreeboxOS and save result in
                 configuration file (to be executed only once)
-  --wrtatus     get FreeboxOS current Wifi Radio status
+  --wrstatus     get FreeboxOS current Wifi Radio status
   --wron        turn FreeboxOS Wifi Radio ON
   --wroff       turn FreeboxOS Wifi Radio OFF
   --wpstatus    get FreeboxOS current Wifi Planning status
