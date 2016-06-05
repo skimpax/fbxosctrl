@@ -1,6 +1,8 @@
 fbxosctrl
 =========
 
+BEWARE: parameters syntax has changed since v1.1.0 compared to previous version (v1.0.5).
+
 Les détails de mise en oeuvre de fbxosctrl sont disponibles sur le wiki : https://github.com/skimpax/fbxosctrl/wiki
 
 
