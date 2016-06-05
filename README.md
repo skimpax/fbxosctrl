@@ -45,7 +45,7 @@ optional arguments:
                 parameters
   --regapp      register this app to FreeboxOS and save result in
                 configuration file (to be executed only once)
-  --wrstatus     get FreeboxOS current Wifi Radio status
+  --wrstatus    get FreeboxOS current Wifi Radio status
   --wron        turn FreeboxOS Wifi Radio ON
   --wroff       turn FreeboxOS Wifi Radio OFF
   --wpstatus    get FreeboxOS current Wifi Planning status
