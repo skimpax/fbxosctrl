@@ -18,6 +18,9 @@ Supported services:
   - set wifi ON
   - set wifi OFF
   - get current wifi status (ON/OFF)
+  - set wifi planning ON
+  - set wifi planning OFF
+  - get current wifi planning status (ON/OFF)
   - reboot the Freebox Server
 
 ###### Dependancies:
@@ -30,7 +33,7 @@ You can use this command to install them:
 
 ```bash
 usage: fbxosctrl.py [-h] [--version] [-v] [-c C]
-                    (--regapp | --wifistatus | --wifion | --wifioff | --reboot)
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --reboot | --dhcpleases)
 
 Command line utility to control some FreeboxOS services.
 
@@ -42,9 +45,12 @@ optional arguments:
                 parameters
   --regapp      register this app to FreeboxOS and save result in
                 configuration file (to be executed only once)
-  --wifistatus  get FreeboxOS current wifi status
-  --wifion      turn FreeboxOS wifi ON
-  --wifioff     turn FreeboxOS wifi OFF
+  --wrstatus     get FreeboxOS current Wifi Radio status
+  --wron        turn FreeboxOS Wifi Radio ON
+  --wroff       turn FreeboxOS Wifi Radio OFF
+  --wpstatus    get FreeboxOS current Wifi Planning status
+  --wpon        turn FreeboxOS Wifi Planning ON
+  --wpoff       turn FreeboxOS Wifi Planning OFF
   --reboot      reboot the Freebox Server now!
 ```
 
