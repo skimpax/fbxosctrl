@@ -3,9 +3,9 @@
 """ This utility handles some FreeboxOS commands which are sent to a
 freebox server to be executed within FreeboxOS app.
 Supported services:
-- set wifi ON
-- set wifi OFF
-- set wifi auto
+- set wifi radio ON/OFF
+- set wifi planning ON/OFF
+- get DHCP leases
 - reboot the Freebox Server
 
 Note: once granted, this app must have 'settings' permissions set
@@ -22,7 +22,7 @@ from hashlib import sha1
 
 # fbxosctrl is a command line utility to get/set dialogs with FreeboxOS
 #
-# Copyright (C) 2013 Christophe Lherieau (aka skimpax)
+# Copyright (C) 2013-2016 Christophe Lherieau (aka skimpax)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -55,10 +55,10 @@ gVerbose = False
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "1.0.5"
+FBXOSCTRL_VERSION = "1.1.0"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
-__copyright__ = "Copyright 2013, Christophe Lherieau"
+__copyright__ = "Copyright 2013-2016, Christophe Lherieau"
 __credits__ = []
 __license__ = "GPL"
 __version__ = FBXOSCTRL_VERSION
@@ -213,9 +213,9 @@ in FreeboxOS server. This script may fail!"
                 raise FbxOSException("Logout failure: %s" % resp)
         self.isLoggedIn = False
 
-    def _setWifiStatus(self, putOn):
+    def _setWifiRadioStatus(self, putOn):
         """ Utility to activate or deactivate wifi radio module """
-        log(">>> _setWifiStatus")
+        log(">>> _setWifiRadioStatus")
         self._login()
         # PUT wifi status
         headers = {'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
@@ -441,9 +441,9 @@ LCD screen. This command shall be executed only once. """
         log(">>> setWifiPlanningOff")
         return self._setWifiPlanning(False)
 
-    def getWifiStatus(self):
-        """ Get the current status of wifi: 1 means ON, 0 means OFF """
-        log(">>> getWifiStatus")
+    def getWifiRadioStatus(self):
+        """ Get the current status of wifi radio: 1 means ON, 0 means OFF """
+        log(">>> getWifiRadioStatus")
         self._login()
         # GET wifi status
         headers = {
@@ -472,15 +472,15 @@ LCD screen. This command shall be executed only once. """
         self._logout()
         return isOn
 
-    def setWifiOn(self):
+    def setWifiRadioOn(self):
         """ Activate (turn-on) wifi radio module """
-        log(">>> setWifiOn")
-        return self._setWifiStatus(True)
+        log(">>> setWifiRadioOn")
+        return self._setWifiRadioStatus(True)
 
-    def setWifiOff(self):
+    def setWifiRadioOff(self):
         """ Deactivate (turn-off) wifi radio module """
-        log(">>> setWifiOff")
-        return self._setWifiStatus(False)
+        log(">>> setWifiRadioOff")
+        return self._setWifiRadioStatus(False)
 
     def getDhcpLeases(self):
         """ List the DHCP leases on going """
@@ -555,20 +555,21 @@ class FreeboxOSCli:
         group.add_argument(
             '--wpoff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Planning OFF')
         group.add_argument(
-            '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
-        group.add_argument(
             '--dhcpleases', default=argparse.SUPPRESS, action='store_true', help='display the current DHCP leases info')
+        group.add_argument(
+            '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
+
         # Configure cmd=>callback association
         self.cmdCallbacks = {
             'regapp': self.controller.registerApp,
-            'wrstatus': self.controller.getWifiStatus,
-            'wron': self.controller.setWifiOn,
-            'wroff': self.controller.setWifiOff,
+            'wrstatus': self.controller.getWifiRadioStatus,
+            'wron': self.controller.setWifiRadioOn,
+            'wroff': self.controller.setWifiRadioOff,
             'wpstatus': self.controller.getWifiPlanning,
             'wpon': self.controller.setWifiPlanningOn,
             'wpoff': self.controller.setWifiPlanningOff,
-            'reboot': self.controller.reboot,
             'dhcpleases': self.controller.getDhcpLeases,
+            'reboot': self.controller.reboot,
         }
 
     def cmdExec(self, argv):
