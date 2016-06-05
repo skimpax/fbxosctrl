@@ -15,12 +15,11 @@ This tool applies to the server box of Freebox v6 (aka Freebox Revolution) only 
 FreeboxOS is the name given by Free.fr to their software running inside the Freebox Server.
 
 Supported services:
-  - set wifi ON
-  - set wifi OFF
+  - set wifi radio ON/OFF
   - get current wifi status (ON/OFF)
-  - set wifi planning ON
-  - set wifi planning OFF
+  - set wifi planning ON/OFF
   - get current wifi planning status (ON/OFF)
+  - get current DHCP leases
   - reboot the Freebox Server
 
 ###### Dependancies:
@@ -33,7 +32,7 @@ You can use this command to install them:
 
 ```bash
 usage: fbxosctrl.py [-h] [--version] [-v] [-c C]
-                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --reboot | --dhcpleases)
+       (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --reboot)
 
 Command line utility to control some FreeboxOS services.
 
@@ -51,6 +50,7 @@ optional arguments:
   --wpstatus    get FreeboxOS current Wifi Planning status
   --wpon        turn FreeboxOS Wifi Planning ON
   --wpoff       turn FreeboxOS Wifi Planning OFF
+  --dhcpleases  display the current DHCP leases info
   --reboot      reboot the Freebox Server now!
 ```
 
