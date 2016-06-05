@@ -233,7 +233,7 @@ in FreeboxOS server. This script may fail!"
             if not putOn:
                 # If we are connected using wifi, disabling wifi will close connection
                 # thus PUT response will never be received: a timeout is expected
-                print "Wifi is now OFF"
+                print "Wifi radio is now OFF"
                 return 0
             else:
                 # Forward timeout exception as should not occur
@@ -248,10 +248,10 @@ in FreeboxOS server. This script may fail!"
         isOn = False
         if True == resp.get('success'):
             if resp.get('result').get('ap_params').get('enabled'):
-                print "Wifi is now ON"
+                print "Wifi radio is now ON"
                 isOn = True
             else:
-                print "Wifi is now OFF"
+                print "Wifi radio is now OFF"
         else:
             raise FbxOSException("Challenge failure: %s" % resp)
         self._logout()
