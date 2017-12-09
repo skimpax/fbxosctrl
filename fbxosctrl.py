@@ -567,8 +567,11 @@ LCD screen. This command shall be executed only once. """
                 strdur = datetime.fromtimestamp(duration).strftime('%M:%S')
 
                 print strdate,
-                if call.get('type') == "outgoing":
+                status = call.get('type')
+                if status == "outgoing":
                     print "<",
+                elif status == "missed":
+                    print "!",
                 else:
                     print ">",
                 print str(number),
@@ -576,7 +579,7 @@ LCD screen. This command shall be executed only once. """
                 if number != name:
                     print "(" + str(name) + ")",
 
-                if duration:
+                if status != "missed" and duration:
                     print "- " + strdur,
                 print ""
 
