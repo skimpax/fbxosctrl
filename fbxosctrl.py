@@ -17,6 +17,7 @@ import argparse
 import requests
 import hmac
 import simplejson as json
+from datetime import datetime
 from hashlib import sha1
 
 
@@ -520,6 +521,94 @@ LCD screen. This command shall be executed only once. """
         self._logout()
         return 0
 
+    def getNewCallList(self):
+        """ List new calls """
+        log(">>> getNewCallList")
+        return self._getCallList(True)
+
+    def getCallList(self):
+        """ List all the calls """
+        log(">>> getCallList")
+        return self._getCallList(False)
+
+    def _getCallList(self, newOnly):
+        """ List all the calls """
+        self._login()
+        # GET Call List
+        headers = {
+            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
+        url = self.fbxAddress + "/api/v4/call/log/"
+        # GET
+        log("GET url: %s" % url)
+        r = requests.get(url, headers=headers, timeout=1)
+        log("GET response: %s" % r.text)
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxOSException("Get error: %s" % r.text)
+        # rc is 200 but did we really succeed?
+        resp = json.loads(r.text)
+        count = 0
+        if True == resp.get('success'):
+            calls = resp.get('result')
+            #print "Call list:"
+            for call in calls:
+
+                # for new call only, we display new calls only
+                if newOnly == True and call.get('new') == False:
+                    continue
+
+                count += 1
+                # call to be displayed
+                timestamp = call.get('datetime')
+                duration = call.get('duration')
+                number = call.get('number')
+                name = call.get('name')
+
+                strdate = datetime.fromtimestamp(timestamp).strftime('%d-%m-%Y %H:%M:%S')
+                strdur = datetime.fromtimestamp(duration).strftime('%M:%S')
+
+                print strdate,
+                status = call.get('type')
+                if status == "outgoing":
+                    print "<",
+                elif status == "missed":
+                    print "!",
+                else:
+                    print ">",
+                print str(number),
+
+                if number != name:
+                    print "(" + str(name) + ")",
+
+                if status != "missed" and duration:
+                    print "- " + strdur,
+                print ""
+
+                #print "LEASE: "+str(lease.get('host').get('reachable'))
+        else:
+            raise FbxOSException("Call list failure: %s" % resp)
+        self._logout()
+
+        if count:
+            return 0
+        return 1
+
+    def setCallsRead(self):
+        """ Mark all the calls as read """
+        self._login()
+        #
+        headers = {
+            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
+        url = self.fbxAddress + "/api/v4/call/log/mark_all_as_read"
+        # POST
+        log("POST url: %s" % url)
+        r = requests.post(url, headers=headers, timeout=1)
+        log("POST response: %s" % r.text)
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxOSException("Get error: %s" % r.text)
+        return 0
+
 class FreeboxOSCli:
 
     """ Command line (cli) interpreter and dispatch commands to controller """
@@ -557,6 +646,12 @@ class FreeboxOSCli:
         group.add_argument(
             '--dhcpleases', default=argparse.SUPPRESS, action='store_true', help='display the current DHCP leases info')
         group.add_argument(
+            '--clist', default=argparse.SUPPRESS, action='store_true', help='display the list of received calls')
+        group.add_argument(
+            '--cnew', default=argparse.SUPPRESS, action='store_true', help='display the list of new received calls')
+        group.add_argument(
+            '--cread', default=argparse.SUPPRESS, action='store_true', help='set read status for all received calls')
+        group.add_argument(
             '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
 
         # Configure cmd=>callback association
@@ -569,6 +664,9 @@ class FreeboxOSCli:
             'wpon': self.controller.setWifiPlanningOn,
             'wpoff': self.controller.setWifiPlanningOff,
             'dhcpleases': self.controller.getDhcpLeases,
+            'clist': self.controller.getCallList,
+            'cnew': self.controller.getNewCallList,
+            'cread': self.controller.setCallsRead,
             'reboot': self.controller.reboot,
         }
 
