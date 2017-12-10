@@ -524,12 +524,12 @@ LCD screen. This command shall be executed only once. """
     def getNewCallList(self):
         """ List new calls """
         log(">>> getNewCallList")
-        self._getCallList(True)
+        return self._getCallList(True)
 
     def getCallList(self):
         """ List all the calls """
         log(">>> getCallList")
-        self._getCallList(False)
+        return self._getCallList(False)
 
     def _getCallList(self, newOnly):
         """ List all the calls """
@@ -547,16 +547,17 @@ LCD screen. This command shall be executed only once. """
             raise FbxOSException("Get error: %s" % r.text)
         # rc is 200 but did we really succeed?
         resp = json.loads(r.text)
-        count=1
+        count = 0
         if True == resp.get('success'):
             calls = resp.get('result')
-            print "Call list:"
+            #print "Call list:"
             for call in calls:
 
                 # for new call only, we display new calls only
                 if newOnly == True and call.get('new') == False:
                     continue
 
+                count += 1
                 # call to be displayed
                 timestamp = call.get('datetime')
                 duration = call.get('duration')
@@ -587,7 +588,10 @@ LCD screen. This command shall be executed only once. """
         else:
             raise FbxOSException("Call list failure: %s" % resp)
         self._logout()
-        return 0
+
+        if count:
+            return 0
+        return 1
 
     def setCallsRead(self):
         """ Mark all the calls as read """
