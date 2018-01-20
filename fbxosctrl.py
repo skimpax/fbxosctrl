@@ -1,65 +1,14 @@
-#! /usr/bin/env python
+#!/usr/bin/env python3
 
-""" This utility handles some FreeboxOS commands which are sent to a
-freebox server to be executed within FreeboxOS app.
-Supported services:
-- set wifi radio ON/OFF
-- set wifi planning ON/OFF
-- get DHCP leases
-- reboot the Freebox Server
-
-Note: once granted, this app must have 'settings' permissions set
-to True in FreeboxOS webgui to be able to modify the configuration. """
-
-import sys
-import os
-import argparse
-import requests
-import hmac
-import simplejson as json
-from datetime import datetime
-from hashlib import sha1
-
-
-# fbxosctrl is a command line utility to get/set dialogs with FreeboxOS
-#
-# Copyright (C) 2013-2016 Christophe Lherieau (aka skimpax)
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <http://www.gnu.org/licenses/>.
-
-# FreeboxOS API is available here: http://dev.freebox.fr/sdk/os
-
-
-########################################################################
-# Configure parameters below on your own configuration
-########################################################################
-
-# your own password configured on your Freebox Server
-MAFREEBOX_PASSWD = '!0freebox0!'
-
-# Set to True to enable logging to stdout
-gVerbose = False
-
-
+# -*- coding: utf-8 -*-
 ########################################################################
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "1.1.0"
+FBXOSCTRL_VERSION = "2.0.0"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
-__copyright__ = "Copyright 2013-2016, Christophe Lherieau"
+__copyright__ = "Copyright 2018, Christophe Lherieau"
 __credits__ = []
 __license__ = "GPL"
 __version__ = FBXOSCTRL_VERSION
@@ -74,7 +23,7 @@ RC_WIFI_OFF = 0
 RC_WIFI_ON = 1
 
 # Descriptor of this app presented to FreeboxOS server to be granted
-gAppDesc = {
+g_app_desc = {
     "app_id": "fr.freebox.fbxosctrl",
     "app_name": "Skimpax FbxOSCtrl",
     "app_version": FBXOSCTRL_VERSION,
@@ -82,14 +31,36 @@ gAppDesc = {
 }
 
 
+import argparse
+import os
+import sys
+import json
+import requests
+import json
+import hmac
+from zeroconf import Zeroconf
+from datetime import datetime
+
+
+g_log_enabled = False
+
+"""General API Information."""
+
+
 def log(what):
-    """ Log to stdout if verbose mode is enabled """
-    if True == gVerbose:
-        print what
+    """Logger function"""
+    global g_log_enabled
+    if g_log_enabled:
+        print(what)
 
 
-class FbxOSException(Exception):
+def enable_log(is_enabled):
+    """Update log state"""
+    global g_log_enabled
+    g_log_enabled = is_enabled
 
+
+class FbxException(Exception):
     """ Exception for FreeboxOS domain """
 
     def __init__(self, reason):
@@ -99,604 +70,895 @@ class FbxOSException(Exception):
         return self.reason
 
 
-class FreeboxOSCtrl:
+class FbxConfiguration:
+    """Configuration/registration management"""
 
-    """ This class handles connection and dialog with FreeboxOS thanks to
-its exposed REST API """
+    def __init__(self, app_desc):
+        """Constructor"""
+        self._app_desc = app_desc
+        self._addr_file = 'fbxosctrl_addressing.txt'
+        self._reg_file = 'fbxosctrl_registration.txt'
+        self._addr_params = None
+        self._reg_params = None
+        self._resp_as_json = False
 
-    def __init__(self, fbxAddress="http://mafreebox.freebox.fr",
-                 regSaveFile="fbxosctrl_registration.txt"):
-        """ Constructor """
-        self.fbxAddress = fbxAddress
-        self.isLoggedIn = False
-        self.registrationSaveFile = regSaveFile
-        self.registration = {'app_token': '', 'track_id': None}
-        self.challenge = None
-        self.sessionToken = None
-        self.permissions = None
+    @property
+    def freebox_address(self):
+        url = '{}://{}:{}'.format(
+            self._addr_params['protocol'],
+            self._addr_params['api_domain'],
+            self._addr_params['port'])
+        return url
 
-    def _saveRegistrationParams(self):
-        """ Save registration parameters (app_id/token) to a local file """
-        log(">>> _saveRegistrationParams")
-        with open(self.registrationSaveFile, 'wb') as outfile:
-            json.dump(self.registration, outfile)
+    @property
+    def app_desc(self):
+        return self._app_desc
 
-    def _loadRegistrationParams(self):
-        log(">>> _loadRegistrationParams: file: %s" % self.registrationSaveFile)
-        if os.path.exists(self.registrationSaveFile):
-            with open(self.registrationSaveFile) as infile:
-                self.registration = json.load(infile)
+    @property
+    def reg_file(self):
+        return self._reg_file
 
-    def _login(self):
-        """ Login to FreeboxOS using API credentials """
-        log(">>> _login")
-        if not self.isLoggedIn:
-            if not self.isRegistered():
-                raise FbxOSException("This app is not registered yet: you have to register it first!")
+    @reg_file.setter
+    def reg_file(self, reg_file):
+        self._reg_file = reg_file
 
-            # 1st stage: get challenge
-            url = self.fbxAddress + "/api/v1/login/"
-            # GET
-            log("GET url: %s" % url)
-            r = requests.get(url, timeout=3)
-            log("GET response: %s" % r.text)
-            # ensure status_code is 200, else raise exception
-            if requests.codes.ok != r.status_code:
-                raise FbxOSException("Get error: %s" % r.text)
-            # rc is 200 but did we really succeed?
-            resp = json.loads(r.text)
-            #log("Obj resp: %s" % resp)
-            if resp.get('success'):
-                if not resp.get('result').get('logged_in'):
-                    self.challenge = resp.get('result').get('challenge')
-            else:
-                raise FbxOSException("Challenge failure: %s" % resp)
+    @property
+    def reg_params(self):
+        return self._reg_params
 
-            # 2nd stage: open a session
-            global gAppDesc
-            apptoken = self.registration.get('app_token')
-            key = self.challenge
-            log("challenge: " + key + ", apptoken: " + apptoken)
-            # Encode to plain string as some python versions seem disturbed else (cf. issue#2)
-            if type(key) == unicode:
-                key = key.encode()
-            # Encode to plain string as some python versions seem disturbed else (cf. issue#3)
-            if type(apptoken) == unicode:
-                apptoken = apptoken.encode()
-            # Hashing token with key
-            h = hmac.new(apptoken, key, sha1)
-            password = h.hexdigest()
-            url = self.fbxAddress + "/api/v1/login/session/"
-            headers = {'Content-type': 'application/json',
-                       'charset': 'utf-8', 'Accept': 'text/plain'}
-            payload = {'app_id': gAppDesc.get('app_id'), 'password': password}
-            #log("Payload: %s" % payload)
-            data = json.dumps(payload)
-            log("POST url: %s data: %s" % (url, data))
-            # post it
-            r = requests.post(url, data, headers=headers, timeout=3)
-            # ensure status_code is 200, else raise exception
-            log("POST response: %s" % r.text)
-            if requests.codes.ok != r.status_code:
-                raise FbxOSException("Post response error: %s" % r.text)
-            # rc is 200 but did we really succeed?
-            resp = json.loads(r.text)
-            #log("Obj resp: %s" % resp)
-            if resp.get('success'):
-                self.sessionToken = resp.get('result').get('session_token')
-                self.permissions = resp.get('result').get('permissions')
-                log("Permissions: %s" % self.permissions)
-                if not self.permissions.get('settings'):
-                    print "Warning: permission 'settings' has not been allowed yet \
-in FreeboxOS server. This script may fail!"
-            else:
-                raise FbxOSException("Session failure: %s" % resp)
-            self.isLoggedIn = True
+    @reg_params.setter
+    def reg_params(self, reg_params):
+        self._reg_params = reg_params
+        self._save_registration_params()
 
-    def _logout(self):
-        """ logout from FreeboxOS """
-        # Not documented yet in the API
-        log(">>> _logout")
-        if self.isLoggedIn:
-            headers = {'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-            url = self.fbxAddress + "/api/v1/login/logout/"
-            # POST
-            log("POST url: %s" % url)
-            r = requests.post(url, headers=headers, timeout=3)
-            log("POST response: %s" % r.text)
-            # ensure status_code is 200, else raise exception
-            if requests.codes.ok != r.status_code:
-                raise FbxOSException("Post error: %s" % r.text)
-            # rc is 200 but did we really succeed?
-            resp = json.loads(r.text)
-            #log("Obj resp: %s" % resp)
-            if not resp.get('success'):
-                raise FbxOSException("Logout failure: %s" % resp)
-        self.isLoggedIn = False
+    @property
+    def resp_as_json(self):
+        return self._resp_as_json
 
-    def _setWifiRadioStatus(self, putOn):
-        """ Utility to activate or deactivate wifi radio module """
-        log(">>> _setWifiRadioStatus")
-        self._login()
-        # PUT wifi status
-        headers = {'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        if putOn:
-            data = {'ap_params': {'enabled': True}}
-        else:
-            data = {'ap_params': {'enabled': False}}
-        url = self.fbxAddress + "/api/v1/wifi/config/"
-        log("PUT url: %s data: %s" % (url, json.dumps(data)))
-        # PUT
-        try:
-            r = requests.put(url, data=json.dumps(data), headers=headers, timeout=1)
-            log("PUT response: %s" % r.text)
-        except requests.exceptions.Timeout as timeoutExcept:
-            if not putOn:
-                # If we are connected using wifi, disabling wifi will close connection
-                # thus PUT response will never be received: a timeout is expected
-                print "Wifi radio is now OFF"
-                return 0
-            else:
-                # Forward timeout exception as should not occur
-                raise timeoutExcept
-        # Response received
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Put error: %s" % r.text)
-        # rc is 200 but did we really succeed?
-        resp = json.loads(r.text)
-        #log("Obj resp: %s" % resp)
-        isOn = False
-        if True == resp.get('success'):
-            if resp.get('result').get('ap_params').get('enabled'):
-                print "Wifi radio is now ON"
-                isOn = True
-            else:
-                print "Wifi radio is now OFF"
-        else:
-            raise FbxOSException("Challenge failure: %s" % resp)
-        self._logout()
-        return isOn
+    @resp_as_json.setter
+    def resp_as_json(self, resp_as_json):
+        self._resp_as_json = resp_as_json
 
-    def _setWifiPlanning(self, putOn):
-        """ Utility to activate or deactivate wifi planning mode """
-        log(">>> _setWifiPlanning")
-        self._login()
-        # PUT wifi status
-        headers = {'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        if putOn:
-            data = {'use_planning': True}
-        else:
-            data = {'use_planning': False}
-        url = self.fbxAddress + "/api/v3/wifi/planning"
-        log("PUT url: %s data: %s" % (url, json.dumps(data)))
-        # PUT
-        try:
-            r = requests.put(url, data=json.dumps(data), headers=headers, timeout=1)
-            log("PUT response: %s" % r.text)
-        except requests.exceptions.Timeout as timeoutExcept:
-            # Forward timeout exception as should not occur
-            raise timeoutExcept
-        # Response received
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Put error: %s" % r.text)
-        # rc is 200 but did we really succeed?
-        resp = json.loads(r.text)
-        #log("Obj resp: %s" % resp)
-        isOn = False
-        if True == resp.get('success'):
-            if resp.get('result').get('use_planning'):
-                print "Wifi planning is now ON"
-                isOn = True
-            else:
-                print "Wifi planning is now OFF"
-        else:
-            raise FbxOSException("Challenge failure: %s" % resp)
-        self._logout()
-        return isOn
+    def load(self):
+        """Load configuration params"""
+        log('>>> load')
+        self._load_addressing_params()
+        self._load_registration_params()
 
-    def hasRegistrationParams(self):
+        if self._reg_params is None:
+            print('No registration params found!')
+            print("You should launch 'fbxosctrl --regapp' once to register to the Freebox Server first.")
+            sys.exit(0)
+
+        url = self.freebox_address
+        print('Freebox Server is accessible via: {}'.format(url))
+
+    def has_registration_params(self):
         """ Indicate whether registration params look initialized """
-        log(">>> hasRegistrationParams")
-        if None != self.registration.get('track_id') and '' != self.registration.get('app_token'):
-            return True
-        else:
-            self._loadRegistrationParams()
-            return None != self.registration.get('track_id') and '' != self.registration.get('app_token')
-
-    def getRegistrationStatus(self):
-        """ Get the current registration status thanks to the track_id """
-        log(">>> getRegistrationStatus")
-        if self.hasRegistrationParams():
-            url = self.fbxAddress + \
-                "/api/v1/login/authorize/%s" % self.registration.get('track_id')
-            log(url)
-            # GET
-            log("GET url: %s" % url)
-            r = requests.get(url, timeout=3)
-            log("GET response: %s" % r.text)
-            # ensure status_code is 200, else raise exception
-            if requests.codes.ok != r.status_code:
-                raise FbxOSException("Get error: %s" % r.text)
-            resp = json.loads(r.text)
-            return resp.get('result').get('status')
-        else:
-            return "Not registered yet!"
-
-    def isRegistered(self):
-        """ Check that the app is currently registered (granted) """
-        log(">>> isRegistered")
-        if self.hasRegistrationParams() and 'granted' == self.getRegistrationStatus():
+        log('>>> has_registration_params')
+        if (self._reg_params
+            and self._reg_params.get('track_id') is not None
+            and self._reg_params.get('app_token') is not ''):
             return True
         else:
             return False
 
-    def registerApp(self):
+    def api_address(self, api_url=None):
+        """Build the full API URL based on the mDNS info"""
+        url = '{freebox_addr}{api_base_url}v{major_api_version}'.format(
+            freebox_addr=self.freebox_address,
+            api_base_url=self._addr_params['api_base_url'],
+            major_api_version=self._addr_params['api_version'][:1])
+        if api_url:
+            if api_url[0] != '/':
+                url += '/'
+            url += '{}'.format(api_url)
+        return url
+
+    def _fetch_fbx_mdns_info_via_mdns(self):
+        print('Querying mDNS about Freebox Server information...')
+        r = Zeroconf()
+        info = r.get_service_info('_fbx-api._tcp.local.', 'Freebox Server._fbx-api._tcp.local.')
+        r.close()
+        return info
+
+    def _save_registration_params(self):
+        """ Save registration parameters (app_id/token) to a local file """
+        log('>>> save_registration_params')
+        with open(self._reg_file, 'w') as of:
+            json.dump(self._reg_params, of, indent=True, sort_keys=True)
+
+    def _load_addressing_params(self):
+        """Load existing addressing params or get the via mDNS"""
+        if os.path.exists(self._addr_file):
+            with open(self._addr_file) as infile:
+                self._addr_params = json.load(infile)
+
+        elif self._addr_params is None:
+            mdns_info = self._fetch_fbx_mdns_info_via_mdns()
+            log('Freebox mDNS info: {}'.format(mdns_info))
+            self._addr_params = {}
+            self._addr_params['protocol'] = 'https' if mdns_info.properties[b'https_available'].decode() else 'http'
+            self._addr_params['api_domain'] = mdns_info.properties[b'api_domain'].decode()
+            self._addr_params['port'] = mdns_info.properties[b'https_port'].decode()
+            self._addr_params['api_base_url'] = mdns_info.properties[b'api_base_url'].decode()
+            self._addr_params['api_version'] = mdns_info.properties[b'api_version'].decode()
+            with open(self._addr_file, 'w') as of:
+                json.dump(self._addr_params, of, indent=True, sort_keys=True)
+
+    def _load_registration_params(self):
+        log('>>> load_registration_params: file: {}'.format(self._reg_file))
+        if os.path.exists(self._reg_file):
+            with open(self._reg_file) as infile:
+                self._reg_params = json.load(infile)
+
+
+class FbxResponse:
+    """"Response from Freebox"""
+
+    @staticmethod
+    def build(jsonresp):
+        """Constructor"""
+        return FbxResponse(jsonresp)
+
+    def __init__(self, jsonresp):
+        """Constructor"""
+        # convert to obj
+        self._resp = json.loads(jsonresp)
+        # expected content checks
+        if self._resp.get('success') is None:
+            raise FbxException('Mandatory field missing: success')
+        elif self._resp.get('success') is not True and self._resp['success'] is not False:
+            raise FbxException('Field success must be either true or false')
+
+        if self._resp['success'] is False:
+            if self._resp.get('msg') is None:
+                raise FbxException('Mandatory error field missing: msg')
+            if self._resp.get('error_code') is None:
+                raise FbxException('Mandatory error field missing: error_code')
+
+    @property
+    def whole_content(self):
+        """Return operation whole response"""
+        return self._resp
+
+    @property
+    def success(self):
+        """Return operation success status"""
+        return self._resp.get('success')
+
+    @property
+    def result(self):
+        """Return operation success result"""
+        return self._resp.get('result')
+
+    @property
+    def error_msg(self):
+        """Return operation error message"""
+        return self._resp.get('msg')
+
+    @property
+    def error_code(self):
+        """Return operation error code"""
+        return self._resp.get('error_code')
+
+
+class FbxHttp():
+    """"HTTP transporter"""
+
+    def __init__(self, conf):
+        """Constructor"""
+        self._conf = conf
+        self._http_timeout = 30
+        self._is_logged_in = False
+        self._challenge = None
+        self._session_token = None
+        self._certificates_file = 'fbxosctrl_certificates.txt'
+        self._make_certificate_chain()
+
+    def __del__(self):
+        """Logout on deletion"""
+        if self._is_logged_in:
+            try:
+                self._logout()
+            except Exception:
+                pass
+
+    @property
+    def headers(self):
+        """Build headers"""
+        h = {'Content-type': 'application/json', 'Accept': 'application/json'}
+        if self._session_token is not None:
+            h['X-Fbx-App-Auth'] = self._session_token
+        return h
+
+    def get(self, uri, timeout=None, no_login=False):
+        """GET request"""
+        log(">>> get")
+        if not no_login:
+            self._login()
+
+        url = self._conf.api_address(uri)
+        log('GET url: {}'.format(url))
+
+        r = requests.get(
+            url,
+            verify=self._certificates_file,
+            headers=self.headers,
+            timeout=timeout if timeout is not None else self._http_timeout)
+        log('GET response: {}'.format(r.text))
+
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxException('GET error - http_status: {} {}'.format(r.status_code, r.text))
+
+        return FbxResponse.build(r.text)
+
+    def put(self, uri, data, timeout=None, no_login=False):
+        """PUT request"""
+        log(">>> put")
+        if not no_login:
+            self._login()
+
+        url = self._conf.api_address(uri)
+        jdata = json.dumps(data)
+        log('PUT url: {} data: {}'.format(url, jdata))
+
+        r = requests.put(
+            url,
+            verify=self._certificates_file,
+            data=jdata,
+            headers=self.headers,
+            timeout=timeout if timeout is not None else self._http_timeout)
+        log('PUT response: {}'.format(r.text))
+
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxException('PUT error - http_status: {} {}'.format(r.status_code, r.text))
+
+        return FbxResponse.build(r.text)
+
+    def post(self, uri, data, timeout=None, no_login=False):
+        """POST request"""
+        log(">>> post")
+        if not no_login:
+            self._login()
+
+        url = self._conf.api_address(uri)
+        jdata = json.dumps(data)
+        log('POST url: {} data: {}'.format(url, jdata))
+
+        r = requests.post(
+            url,
+            verify=self._certificates_file,
+            data=jdata,
+            headers=self.headers,
+            timeout=timeout if timeout is not None else self._http_timeout)
+        log('POST response: {}'.format(r.text))
+
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxException('POST error - http_status: {} {}'.format(r.status_code, r.text))
+
+        return FbxResponse.build(r.text)
+
+    def _login(self):
+        """ Login to FreeboxOS using API credentials """
+        log(">>> _login")
+        if not self._is_logged_in:
+            self._session_token = None
+
+            # 1st stage: get challenge
+            resp = self.get('/login', no_login=True)
+
+            if resp.success:
+                if not resp.result.get('logged_in'):
+                    self._challenge = resp.result.get('challenge')
+            else:
+                raise FbxException('Challenge failure: {}'.format(resp))
+
+            # 2nd stage: open a session
+            app_token = self._conf.reg_params.get('app_token')
+            log('challenge: {}, apptoken: {}'.format(self._challenge, app_token))
+            # Hashing token with key
+            password = hmac.new(app_token.encode(), self._challenge.encode(), 'sha1').hexdigest()
+            uri = '/login/session/'
+            payload = {'app_id': self._conf.app_desc.get('app_id'), 'password': password}
+            # post it
+            resp = self.post(uri, payload, no_login=True)
+
+            if resp.success:
+                self._session_token = resp.result.get('session_token')
+                permissions = resp.result.get('permissions')
+                log('Permissions: {}'.format(permissions))
+                if not permissions.get('settings'):
+                    print("Warning: permission 'settings' has not been allowed yet \
+in FreeboxOS server. This script may fail!")
+            else:
+                raise FbxException('Session failure: {}'.format(resp))
+
+            # set headers for next dialogs
+            self._is_logged_in = True
+
+    def _logout(self):
+        """ logout from FreeboxOS """
+        log(">>> _logout")
+        if self._is_logged_in:
+            url = self._conf.api_address('/login/logout/')
+            resp = self._http.post(url, headers=self.headers)
+
+            # reset headers as no more dialogs expected
+            self._http_headers = None
+
+            if not resp.success:
+                raise FbxException('Logout failure: {}'.format(resp))
+        self._session_token = None
+        self._is_logged_in = False
+
+    def _make_certificate_chain(self):
+        """Store the certificate chain required for HTTPS"""
+        with open(self._certificates_file, 'w') as of:
+            of.write(
+                # see https://dev.freebox.fr/sdk/os/# for content below
+"""-----BEGIN CERTIFICATE-----
+MIICWTCCAd+gAwIBAgIJAMaRcLnIgyukMAoGCCqGSM49BAMCMGExCzAJBgNVBAYT
+AkZSMQ8wDQYDVQQIDAZGcmFuY2UxDjAMBgNVBAcMBVBhcmlzMRMwEQYDVQQKDApG
+cmVlYm94IFNBMRwwGgYDVQQDDBNGcmVlYm94IEVDQyBSb290IENBMB4XDTE1MDkw
+MTE4MDIwN1oXDTM1MDgyNzE4MDIwN1owYTELMAkGA1UEBhMCRlIxDzANBgNVBAgM
+BkZyYW5jZTEOMAwGA1UEBwwFUGFyaXMxEzARBgNVBAoMCkZyZWVib3ggU0ExHDAa
+BgNVBAMME0ZyZWVib3ggRUNDIFJvb3QgQ0EwdjAQBgcqhkjOPQIBBgUrgQQAIgNi
+AASCjD6ZKn5ko6cU5Vxh8GA1KqRi6p2GQzndxHtuUmwY8RvBbhZ0GIL7bQ4f08ae
+JOv0ycWjEW0fyOnAw6AYdsN6y1eNvH2DVfoXQyGoCSvXQNAUxla+sJuLGICRYiZz
+mnijYzBhMB0GA1UdDgQWBBTIB3c2GlbV6EIh2ErEMJvFxMz/QTAfBgNVHSMEGDAW
+gBTIB3c2GlbV6EIh2ErEMJvFxMz/QTAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB
+/wQEAwIBhjAKBggqhkjOPQQDAgNoADBlAjA8tzEMRVX8vrFuOGDhvZr7OSJjbBr8
+gl2I70LeVNGEXZsAThUkqj5Rg9bV8xw3aSMCMQCDjB5CgsLH8EdZmiksdBRRKM2r
+vxo6c0dSSNrr7dDN+m2/dRvgoIpGL2GauOGqDFY=
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIFmjCCA4KgAwIBAgIJAKLyz15lYOrYMA0GCSqGSIb3DQEBCwUAMFoxCzAJBgNV
+BAYTAkZSMQ8wDQYDVQQIDAZGcmFuY2UxDjAMBgNVBAcMBVBhcmlzMRAwDgYDVQQK
+DAdGcmVlYm94MRgwFgYDVQQDDA9GcmVlYm94IFJvb3QgQ0EwHhcNMTUwNzMwMTUw
+OTIwWhcNMzUwNzI1MTUwOTIwWjBaMQswCQYDVQQGEwJGUjEPMA0GA1UECAwGRnJh
+bmNlMQ4wDAYDVQQHDAVQYXJpczEQMA4GA1UECgwHRnJlZWJveDEYMBYGA1UEAwwP
+RnJlZWJveCBSb290IENBMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA
+xqYIvq8538SH6BJ99jDlOPoyDBrlwKEp879oYplicTC2/p0X66R/ft0en1uSQadC
+sL/JTyfgyJAgI1Dq2Y5EYVT/7G6GBtVH6Bxa713mM+I/v0JlTGFalgMqamMuIRDQ
+tdyvqEIs8DcfGB/1l2A8UhKOFbHQsMcigxOe9ZodMhtVNn0mUyG+9Zgu1e/YMhsS
+iG4Kqap6TGtk80yruS1mMWVSgLOq9F5BGD4rlNlWLo0C3R10mFCpqvsFU+g4kYoA
+dTxaIpi1pgng3CGLE0FXgwstJz8RBaZObYEslEYKDzmer5zrU1pVHiwkjsgwbnuy
+WtM1Xry3Jxc7N/i1rxFmN/4l/Tcb1F7x4yVZmrzbQVptKSmyTEvPvpzqzdxVWuYi
+qIFSe/njl8dX9v5hjbMo4CeLuXIRE4nSq2A7GBm4j9Zb6/l2WIBpnCKtwUVlroKw
+NBgB6zHg5WI9nWGuy3ozpP4zyxqXhaTgrQcDDIG/SQS1GOXKGdkCcSa+VkJ0jTf5
+od7PxBn9/TuN0yYdgQK3YDjD9F9+CLp8QZK1bnPdVGywPfL1iztngF9J6JohTyL/
+VMvpWfS/X6R4Y3p8/eSio4BNuPvm9r0xp6IMpW92V8SYL0N6TQQxzZYgkLV7TbQI
+Hw6v64yMbbF0YS9VjS0sFpZcFERVQiodRu7nYNC1jy8CAwEAAaNjMGEwHQYDVR0O
+BBYEFD2erMkECujilR0BuER09FdsYIebMB8GA1UdIwQYMBaAFD2erMkECujilR0B
+uER09FdsYIebMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGGMA0GCSqG
+SIb3DQEBCwUAA4ICAQAZ2Nx8mWIWckNY8X2t/ymmCbcKxGw8Hn3BfTDcUWQ7GLRf
+MGzTqxGSLBQ5tENaclbtTpNrqPv2k6LY0VjfrKoTSS8JfXkm6+FUtyXpsGK8MrLL
+hZ/YdADTfbbWOjjD0VaPUoglvo2N4n7rOuRxVYIij11fL/wl3OUZ7GHLgL3qXSz0
++RGW+1oZo8HQ7pb6RwLfv42Gf+2gyNBckM7VVh9R19UkLCsHFqhFBbUmqwJgNA2/
+3twgV6Y26qlyHXXODUfV3arLCwFoNB+IIrde1E/JoOry9oKvF8DZTo/Qm6o2KsdZ
+dxs/YcIUsCvKX8WCKtH6la/kFCUcXIb8f1u+Y4pjj3PBmKI/1+Rs9GqB0kt1otyx
+Q6bqxqBSgsrkuhCfRxwjbfBgmXjIZ/a4muY5uMI0gbl9zbMFEJHDojhH6TUB5qd0
+JJlI61gldaT5Ci1aLbvVcJtdeGhElf7pOE9JrXINpP3NOJJaUSueAvxyj/WWoo0v
+4KO7njox8F6jCHALNDLdTsX0FTGmUZ/s/QfJry3VNwyjCyWDy1ra4KWoqt6U7SzM
+d5jENIZChM8TnDXJzqc+mu00cI3icn9bV9flYCXLTIsprB21wVSMh0XeBGylKxeB
+S27oDfFq04XSox7JM9HdTt2hLK96x1T7FpFrBTnALzb7vHv9MhXqAT90fPR/8A==
+-----END CERTIFICATE-----
+""")
+
+
+class FbxServiceAuth:
+    """"Authentication domain"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
+        self._registered = False
+
+    def is_registered(self):
+        """ Check that the app is currently registered (granted) """
+        log(">>> is_registered")
+        if self._registered:
+            return True
+        self._registered = (self.get_registration_status() == 'granted')
+        return self._registered
+
+    def get_registration_status(self):
+        """ Get the current registration status thanks to the track_id """
+        log(">>> get_registration_status")
+        if self._conf.has_registration_params():
+            uri = '/login/authorize/{}'.format(self._conf.reg_params.get('track_id'))
+            resp = self._http.get(uri, no_login=True)
+
+            return resp.result.get('status')
+        else:
+            return "Not registered yet!"
+
+    def register_app(self):
         """ Register this app to FreeboxOS to that user grants this apps via Freebox Server
 LCD screen. This command shall be executed only once. """
-        log(">>> registerApp")
+        log(">>> register_app")
         register = True
-        if self.hasRegistrationParams():
-            status = self.getRegistrationStatus()
+        if self._conf.has_registration_params():
+            status = self.get_registration_status()
+            track_id = self.registration.get('track_id')
             if 'granted' == status:
-                print "This app is already granted on Freebox Server (app_id = %s). You can now dialog with it." % self.registration.get('track_id')
+                print(
+                    'This app is already granted on Freebox Server (track_id = {}).' +
+                    ' You can now dialog with it.'
+                    .format(track_id))
                 register = False
             elif 'pending' == status:
-                print "This app grant is still pending: user should grant it on Freebox Server lcd/touchpad (app_id = %s)." % self.registration.get('track_id')
+                print(
+                    'This app grant is still pending: user should grant it' +
+                    ' on Freebox Server lcd/touchpad (track_id = {}).'
+                    .format(track_id))
                 register = False
             elif 'unknown' == status:
-                print "This app_id (%s) is unknown by Freebox Server: you have to register again to Freebox Server to get a new app_id." % self.registration.get('track_id')
+                print(
+                    'This track_id ({}) is unknown by Freebox Server: you have' +
+                    ' to register again to Freebox Server to get a new app_id.'
+                    .format(track_id))
             elif 'denied' == status:
-                print "This app has been denied by user on Freebox Server (app_id = %s)." % self.registration.get('track_id')
+                print(
+                    'This app has been denied by user on Freebox Server (track_id = {}).'
+                    .format(self._conf.reg_params.get('track_id')))
                 register = False
             elif 'timeout' == status:
-                print "Timeout occured for this app_id: you have to register again to Freebox Server to get a new app_id (current app_id = %s)." % self.registration.get('track_id')
+                print(
+                    'Timeout occured for this app_id: you have to register again' +
+                    ' to Freebox Server to get a new app_id (current track_id = {}).'
+                    .format(track_id))
             else:
-                print "Unexpected response: %s" % status
+                print('Unexpected response: {}'.format(status))
 
         if register:
-            global gAppDesc
-            url = self.fbxAddress + "/api/v1/login/authorize/"
-            data = json.dumps(gAppDesc)
-            headers = {
-                'Content-type': 'application/json', 'Accept': 'text/plain'}
+            uri = '/login/authorize/'
+            data = self._conf.app_desc
             # post it
-            log("POST url: %s data: %s" % (url, data))
-            r = requests.post(url, data=data, headers=headers, timeout=3)
-            log("POST response: %s" % r.text)
-            # ensure status_code is 200, else raise exception
-            if requests.codes.ok != r.status_code:
-                raise FbxOSException("Post error: %s" % r.text)
-            # rc is 200 but did we really succeed?
-            resp = json.loads(r.text)
-            #log("Obj resp: %s" % resp)
-            if True == resp.get('success'):
-                self.registration['app_token'] = resp.get('result').get('app_token')
-                self.registration['track_id'] = resp.get('result').get('track_id')
-                self._saveRegistrationParams()
-                print "Now you have to accept this app on your Freebox server: take a look on its lcd screen."
+            resp = self._http.post(uri, data=data, no_login=True)
+
+            # save registration params
+            if resp.success:
+                params = {'app_token': resp.result.get('app_token'),
+                'track_id': resp.result.get('track_id')}
+                self._conf.reg_params = params
+                print(
+                    'Now you have to accept this app on your Freebox server:' +
+                    ' take a look on its lcd screen.')
             else:
-                print "NOK"
+                print('NOK')
+
+
+class FbxServiceSystem:
+    """System domain"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
 
     def reboot(self):
         """ Reboot the freebox server now! """
         log(">>> reboot")
-        self._login()
-        headers = {'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        url = self.fbxAddress + "/api/v1/system/reboot/"
-        # POST
-        log("POST url: %s" % url)
-        r = requests.post(url, headers=headers, timeout=3)
-        log("POST response: %s" % r.text)
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Post error: %s" % r.text)
-        # rc is 200 but did we really succeed?
-        resp = json.loads(r.text)
-        #log("Obj resp: %s" % resp)
-        if not resp.get('success'):
-            raise FbxOSException("Logout failure: %s" % resp)
-        print "Freebox Server is now rebooting."
-        self.isLoggedIn = False
+        uri = '/system/reboot/'
+        self._http.post(uri, timeout=3)
         return True
 
-    def getWifiPlanning(self):
-        """ Get the current status of wifi: 1 means planning enabled, 0 means no planning """
-        log(">>> getWifiPlanning")
-        self._login()
-        # GET wifi planning
-        headers = {
-            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        url = self.fbxAddress + "/api/v1/wifi/planning"
-        # GET
-        log("GET url: %s" % url)
-        r = requests.get(url, headers=headers, timeout=1)
-        log("GET response: %s" % r.text)
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Get error: %s" % r.text)
-        # rc is 200 but did we really succeed?
-        resp = json.loads(r.text)
-        #log("Obj resp: %s" % resp)
-        isOn = True
-        if True == resp.get('success'):
-            if resp.get('result').get('use_planning'):
-                print "Wifi planning is ON"
-                isOn = True
-            else:
-                print "Wifi planning is OFF"
-                isOn = False
-        else:
-            raise FbxOSException("Challenge failure: %s" % resp)
-        self._logout()
-        return isOn
 
-    def setWifiPlanningOn(self):
-        """ Activate (turn-on) wifi planning mode """
-        log(">>> setWifiPlanningOn")
-        return self._setWifiPlanning(True)
+class FbxServiceWifi:
+    """Wifi domain"""
 
-    def setWifiPlanningOff(self):
-        """ Deactivate (turn-off) wifi planning mode """
-        log(">>> setWifiPlanningOff")
-        return self._setWifiPlanning(False)
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
 
-    def getWifiRadioStatus(self):
+    def get_wifi_config(self):
+        """Get the current wifi config"""
+        uri = '/wifi/config/'
+        resp = self._http.get(uri)
+        return resp
+
+    def get_wifi_radio_state(self):
         """ Get the current status of wifi radio: 1 means ON, 0 means OFF """
-        log(">>> getWifiRadioStatus")
-        self._login()
-        # GET wifi status
-        headers = {
-            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        url = self.fbxAddress + "/api/v1/wifi/"
-        # GET
-        log("GET url: %s" % url)
-        r = requests.get(url, headers=headers, timeout=1)
-        log("GET response: %s" % r.text)
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Get error: %s" % r.text)
-        # rc is 200 but did we really succeed?
-        resp = json.loads(r.text)
-        #log("Obj resp: %s" % resp)
-        isOn = True
-        if True == resp.get('success'):
-            if resp.get('result').get('active'):
-                print "Wifi is ON"
-                isOn = True
+        log('>>> get_wifi_radio_state')
+        uri = '/wifi/config/'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        is_on = resp.success and resp.result.get('enabled')
+        print('Wifi is {}'.format('ON' if is_on else 'OFF'))
+        return is_on
+
+    def set_wifi_radio_on(self):
+        self._set_wifi_radio_state(True)
+
+    def set_wifi_radio_off(self):
+        self._set_wifi_radio_state(False)
+
+    def _set_wifi_radio_state(self, set_on):
+        """ Utility to activate or deactivate wifi radio module """
+        log('>>> set_wifi_radio_state {}'.format('ON' if set_on else 'OFF'))
+        # PUT wifi status
+        uri = '/wifi/config/'
+        data = {'enabled': True} if set_on else {'enabled': False}
+        timeout = 3 if not set_on else None
+
+        # PUT
+        try:
+            resp = self._http.put(uri, data=data, timeout=timeout)
+        except requests.exceptions.Timeout as exc:
+            if not set_on:
+                # If we are connected using wifi, disabling wifi will close connection
+                # thus PUT response will never be received: a timeout is expected
+                print('Wifi radio is now OFF')
+                return 0
             else:
-                print "Wifi is OFF"
-                isOn = False
-        else:
-            raise FbxOSException("Challenge failure: %s" % resp)
-        self._logout()
-        return isOn
+                # Forward timeout exception as should not occur
+                raise exc
 
-    def setWifiRadioOn(self):
-        """ Activate (turn-on) wifi radio module """
-        log(">>> setWifiRadioOn")
-        return self._setWifiRadioStatus(True)
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
 
-    def setWifiRadioOff(self):
-        """ Deactivate (turn-off) wifi radio module """
-        log(">>> setWifiRadioOff")
-        return self._setWifiRadioStatus(False)
+        if self._conf.resp_as_json:
+            return resp.whole_content
 
-    def getDhcpLeases(self):
-        """ List the DHCP leases on going """
-        log(">>> getDhcpLeases")
-        self._login()
+        is_on = resp.result.get('enabled')
+        print('Wifi radio is now {}'.format('ON' if is_on else 'OFF'))
+        return is_on
+
+    def get_wifi_planning(self):
+        """ Get the current status of wifi: 1 means planning enabled, 0 means no planning """
+        log('>>> get_wifi_planning')
+        uri = '/wifi/planning/'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        is_on = resp.success and resp.result.get('use_planning')
+        print('Wifi planning is {}'.format('ON' if is_on else 'OFF'))
+        return is_on
+
+    def set_wifi_planning_on(self):
+        self._set_wifi_planning(True)
+
+    def set_wifi_planning_off(self):
+        self._set_wifi_planning(False)
+
+    def _set_wifi_planning(self, set_on):
+        """ Utility to activate or deactivate wifi planning mode """
+        log('>>> set_wifi_planning {}'.format('ON' if set_on else 'OFF'))
+        # PUT wifi planning
+        url = '/wifi/planning/'
+        data = {'use_planning': True} if set_on else {'use_planning': False}
+
+        resp = self._http.put(url, data=data)
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        is_on = resp.result.get('use_planning')
+        print('Wifi planning is now {}'.format('ON' if is_on else 'OFF'))
+        return is_on
+
+
+class FbxServiceDhcp:
+    """DHCP domain"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
+
+    def get_config(self):
+        """Get the current DHCP config"""
+        uri = '/dhcp/config/'
+        resp = self._http.get(uri)
+        return resp
+
+    def get_dhcp_leases(self):
+        """ List the DHCP leases on going"""
+        log(">>> get_dhcp_leases")
         # GET wifi status
-        headers = {
-            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        url = self.fbxAddress + "/api/v1/dhcp/dynamic_lease/"
-        # GET
-        log("GET url: %s" % url)
-        r = requests.get(url, headers=headers, timeout=1)
-        log("GET response: %s" % r.text)
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Get error: %s" % r.text)
-        # rc is 200 but did we really succeed?
-        resp = json.loads(r.text)
-        count=1
-        if True == resp.get('success'):
-            leases = resp.get('result')
-            print "List of reachable leases:"
-            for lease in leases:
-                #print "LEASE: "+str(lease.get('host').get('reachable'))
-                if True == lease.get('host').get('reachable'):
-                    print "  ["+repr(count)+"]: mac: "+lease.get('mac')+", ip: "+lease.get('ip')+", hostname: "+lease.get('hostname')
-                    count += 1
-            count = 1
-            print "List of unreachable leases:"
-            for lease in leases:
-                #print "LEASE: "+str(lease)
-                if True != lease.get('host').get('reachable'):
-                    print "  ["+repr(count)+"]: mac: "+lease.get('mac')+", ip: "+lease.get('ip')+", hostname: "+lease.get('hostname')
-                    count += 1
-        else:
-            raise FbxOSException("Dynamic lease failure: %s" % resp)
-        self._logout()
-        return 0
+        uri = '/dhcp/dynamic_lease/'
+        resp = self._http.get(uri)
 
-    def getNewCallList(self):
-        """ List new calls """
-        log(">>> getNewCallList")
-        return self._getCallList(True)
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
 
-    def getCallList(self):
-        """ List all the calls """
-        log(">>> getCallList")
-        return self._getCallList(False)
+        # json response format
+        if self._conf.resp_as_json:
+            return resp.whole_content
 
-    def _getCallList(self, newOnly):
-        """ List all the calls """
-        self._login()
-        # GET Call List
-        headers = {
-            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        url = self.fbxAddress + "/api/v4/call/log/"
-        # GET
-        log("GET url: %s" % url)
-        r = requests.get(url, headers=headers, timeout=1)
-        log("GET response: %s" % r.text)
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Get error: %s" % r.text)
-        # rc is 200 but did we really succeed?
-        resp = json.loads(r.text)
-        count = 0
-        if True == resp.get('success'):
-            calls = resp.get('result')
-            #print "Call list:"
-            for call in calls:
-
-                # for new call only, we display new calls only
-                if newOnly == True and call.get('new') == False:
-                    continue
-
-                count += 1
-                # call to be displayed
-                timestamp = call.get('datetime')
-                duration = call.get('duration')
-                number = call.get('number')
-                name = call.get('name')
-
-                strdate = datetime.fromtimestamp(timestamp).strftime('%d-%m-%Y %H:%M:%S')
-                strdur = datetime.fromtimestamp(duration).strftime('%M:%S')
-
-                print strdate,
-                status = call.get('type')
-                if status == "outgoing":
-                    print "<",
-                elif status == "missed":
-                    print "!",
-                else:
-                    print ">",
-                print str(number),
-
-                if number != name:
-                    print "(" + str(name) + ")",
-
-                if status != "missed" and duration:
-                    print "- " + strdur,
-                print ""
-
-                #print "LEASE: "+str(lease.get('host').get('reachable'))
-        else:
-            raise FbxOSException("Call list failure: %s" % resp)
-        self._logout()
-
-        if count:
+        # human response format
+        leases = resp.result
+        if leases is None:
+            print('No DHCP leases')
             return 0
-        return 1
 
-    def setCallsRead(self):
-        """ Mark all the calls as read """
-        self._login()
-        #
-        headers = {
-            'X-Fbx-App-Auth': self.sessionToken, 'Accept': 'text/plain'}
-        url = self.fbxAddress + "/api/v4/call/log/mark_all_as_read"
-        # POST
-        log("POST url: %s" % url)
-        r = requests.post(url, headers=headers, timeout=1)
-        log("POST response: %s" % r.text)
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxOSException("Get error: %s" % r.text)
+        count = 1
+        print('List of reachable leases:')
+        for lease in leases:
+            if lease.get('host').get('reachable'):
+                print(
+                    '  [{}]: mac: {}, ip: {}, hostname: {}, static: {}'
+                    .format(
+                        count, lease.get('mac'), lease.get('ip'),
+                        lease.get('hostname'), lease.get('is_static')))
+                count += 1
+
+        count = 1
+        print('List of unreachable leases:')
+        for lease in leases:
+            if lease.get('host').get('reachable') is False:
+                print(
+                    '  [{}]: mac: {}, ip: {}, hostname: {}, static: {}'
+                    .format(
+                        count, lease.get('mac'), lease.get('ip'),
+                        lease.get('hostname'), lease.get('is_static')))
+                count += 1
         return 0
+
+
+class FbxServiceCall:
+    """Call domain"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
+
+    def get_new_calls_list(self):
+        """ List new calls """
+        log(">>> get_new_calls_list")
+        return self._get_calls_list(True)
+
+    def get_all_calls_list(self):
+        """ List all the calls """
+        log(">>> get_all_calls_list")
+        return self._get_calls_list(False)
+
+    def _get_calls_list(self, new_only):
+        """ List all the calls """
+        uri = '/call/log/'
+        resp = self._http.get(uri)
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        # json response format
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        count = 0
+        calls = resp.result
+        for call in calls:
+            # for new call only, we display new calls only
+            if new_only and call.get('new') is False:
+                continue
+
+            count += 1
+            # call to be displayed
+            timestamp = call.get('datetime')
+            duration = call.get('duration')
+            number = call.get('number')
+            name = call.get('name')
+
+            strdate = datetime.fromtimestamp(
+                timestamp).strftime('%d-%m-%Y %H:%M:%S')
+            strdur = datetime.fromtimestamp(
+                duration).strftime('%M:%S')
+
+            status = call.get('type')
+            tag = '<' if status == 'outgoing'else '!' if status == 'missed' else '>'
+            naming = ' ({})'.format(name) if number != name else ''
+            dur = ' - {}'.format(strdur) if status != "missed" and duration else ''
+            print('{} {} {}{}{}'.format(strdate, tag, number, naming, dur))
+
+        return count > 0
+
+    def mark_calls_as_read(self):
+        """ Mark all the calls as read """
+        log(">>> mark_calls_as_read")
+
+        uri = '/call/log/mark_all_as_read/'
+        data = {}
+        resp = self._http.post(uri, data)
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        # json response format
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        return 0
+
+
+class FreeboxOSCtrl:
+    """"""
+    def __init__(self):
+        """Constructor"""
+        self._conf = FbxConfiguration(g_app_desc)
+        self._http = FbxHttp(self._conf)
+        self._srv_auth = FbxServiceAuth(self._http, self._conf)
+        self._srv_system = FbxServiceSystem(self._http, self._conf)
+        self._srv_wifi = FbxServiceWifi(self._http, self._conf)
+        self._srv_dhcp = FbxServiceDhcp(self._http, self._conf)
+        self._srv_call = FbxServiceCall(self._http, self._conf)
+
+    @property
+    def conf(self):
+        return self._conf
+
+    @property
+    def srv_auth(self):
+        return self._srv_auth
+
+    @property
+    def srv_system(self):
+        return self._srv_system
+
+    @property
+    def srv_wifi(self):
+        return self._srv_wifi
+
+    @property
+    def srv_dhcp(self):
+        return self._srv_dhcp
+
+    @property
+    def srv_call(self):
+        return self._srv_call
+
 
 class FreeboxOSCli:
-
     """ Command line (cli) interpreter and dispatch commands to controller """
 
     def __init__(self, controller):
         """ Constructor """
-        self.controller = controller
+        self._ctrl = controller
         # Configure parser
-        self.parser = argparse.ArgumentParser(
+        self._parser = argparse.ArgumentParser(
             description='Command line utility to control some FreeboxOS services.')
         # CLI related actions
-        self.parser.add_argument(
-            '--version', action='version', version="%(prog)s " + __version__)
-        self.parser.add_argument(
-            '-v', action='store_true', help='verbose mode')
-        self.parser.add_argument(
-            '-c', nargs=1, help='configuration file to store/retrieve FreeboxOS registration parameters')
+        self._parser.add_argument(
+            '--version',
+            action='version',
+            version="%(prog)s " + __version__)
+        self._parser.add_argument(
+            '-v',
+            action='store_true',
+            help='verbose mode')
+        self._parser.add_argument(
+            '-j',
+            action='store_true',
+            help='simply print Freebox Server reponse in JSON format')
         # Real freeboxOS actions
-        group = self.parser.add_mutually_exclusive_group(required=True)
+        group = self._parser.add_mutually_exclusive_group(required=True)
         group.add_argument(
-            '--regapp', default=argparse.SUPPRESS, action='store_true',
-            help='register this app to FreeboxOS and save result in configuration file (to be executed only once)')
-        group.add_argument('--wrstatus', default=argparse.SUPPRESS,
-                           action='store_true', help='get FreeboxOS current Wifi Radio status')
+            '--regapp',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='register this app to FreeboxOS and save result in configuration file' +
+            ' (to be executed only once)')
         group.add_argument(
-            '--wron', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Radio ON')
+            '--wrstatus',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='get FreeboxOS current Wifi Radio status')
         group.add_argument(
-            '--wroff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Radio OFF')
-        group.add_argument('--wpstatus', default=argparse.SUPPRESS,
-                           action='store_true', help='get FreeboxOS current Wifi Planning status')
+            '--wron',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='turn FreeboxOS Wifi Radio ON')
         group.add_argument(
-            '--wpon', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Planning ON')
+            '--wroff',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='turn FreeboxOS Wifi Radio OFF')
         group.add_argument(
-            '--wpoff', default=argparse.SUPPRESS, action='store_true', help='turn FreeboxOS Wifi Planning OFF')
+            '--wpstatus',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='get FreeboxOS current Wifi Planning status')
         group.add_argument(
-            '--dhcpleases', default=argparse.SUPPRESS, action='store_true', help='display the current DHCP leases info')
+            '--wpon',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='turn FreeboxOS Wifi Planning ON')
         group.add_argument(
-            '--clist', default=argparse.SUPPRESS, action='store_true', help='display the list of received calls')
+            '--wpoff',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='turn FreeboxOS Wifi Planning OFF')
         group.add_argument(
-            '--cnew', default=argparse.SUPPRESS, action='store_true', help='display the list of new received calls')
+            '--dhcpleases',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the current DHCP leases info')
         group.add_argument(
-            '--cread', default=argparse.SUPPRESS, action='store_true', help='set read status for all received calls')
+            '--clist',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the list of received calls')
         group.add_argument(
-            '--reboot', default=argparse.SUPPRESS, action='store_true', help='reboot the Freebox Server now!')
+            '--cnew',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the list of new received calls')
+        group.add_argument(
+            '--cread',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='set read status for all received calls')
+        group.add_argument(
+            '--reboot',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='reboot the Freebox Server now!')
 
         # Configure cmd=>callback association
-        self.cmdCallbacks = {
-            'regapp': self.controller.registerApp,
-            'wrstatus': self.controller.getWifiRadioStatus,
-            'wron': self.controller.setWifiRadioOn,
-            'wroff': self.controller.setWifiRadioOff,
-            'wpstatus': self.controller.getWifiPlanning,
-            'wpon': self.controller.setWifiPlanningOn,
-            'wpoff': self.controller.setWifiPlanningOff,
-            'dhcpleases': self.controller.getDhcpLeases,
-            'clist': self.controller.getCallList,
-            'cnew': self.controller.getNewCallList,
-            'cread': self.controller.setCallsRead,
-            'reboot': self.controller.reboot,
+        self._cmd_handlers = {
+            'regapp': self._ctrl.srv_auth.register_app,
+            'wrstatus': self._ctrl.srv_wifi.get_wifi_radio_state,
+            'wron': self._ctrl.srv_wifi.set_wifi_radio_on,
+            'wroff': self._ctrl.srv_wifi.set_wifi_radio_off,
+            'wpstatus': self._ctrl.srv_wifi.get_wifi_planning,
+            'wpon': self._ctrl.srv_wifi.set_wifi_planning_on,
+            'wpoff': self._ctrl.srv_wifi.set_wifi_planning_off,
+            'dhcpleases': self._ctrl.srv_dhcp.get_dhcp_leases,
+            'clist': self._ctrl.srv_call.get_all_calls_list,
+            'cnew': self._ctrl.srv_call.get_new_calls_list,
+            'cread': self._ctrl.srv_call.mark_calls_as_read,
+            'reboot': self._ctrl.srv_system.reboot,
         }
 
-    def cmdExec(self, argv):
+    def parse_args(self, argv):
         """ Parse the parameters and execute the associated command """
-        args = self.parser.parse_args(argv)
+        args = self._parser.parse_args(argv)
         argsdict = vars(args)
+
         # Activate verbose mode if requested
-        if True == argsdict.get('v'):
-            global gVerbose
-            gVerbose = True
-        #log("Args dict: %s" % argsdict)
-        if argsdict.get('c'):
-            self.controller.registrationSaveFile = argsdict.get('c')[0]
-        # Suppress '-v' command as not a FreeboxOS cmd
+        if argsdict.get('v'):
+            enable_log(True)
         del argsdict['v']
-        del argsdict['c']
-        # Let's execute FreeboxOS cmd
-        return self.dispatch(argsdict.keys())
+
+        # Activate json output if requested
+        if argsdict.get('j'):
+            self._ctrl.conf.resp_as_json = True
+        del argsdict['j']
+
+        return argsdict
 
     def dispatch(self, args):
         """ Call controller action """
         for cmd in args:
             # retrieve callback associated to cmd and execute it, if not found
             # display help
-            return self.cmdCallbacks.get(cmd, self.parser.print_help)()
+            return self._cmd_handlers.get(cmd, self._parser.print_help)()
 
 
 if __name__ == '__main__':
-        controller = FreeboxOSCtrl()
-        cli = FreeboxOSCli(controller)
-        rc = cli.cmdExec(sys.argv[1:])
+        ctrl = FreeboxOSCtrl()
+        cli = FreeboxOSCli(ctrl)
+
+        args = cli.parse_args(sys.argv[1:])
+
+        ctrl.conf.load()
+
+        rc = cli.dispatch(args)
+
         sys.exit(rc)
+
