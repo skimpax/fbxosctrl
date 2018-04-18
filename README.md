@@ -28,9 +28,9 @@ Supported services:
 
 
 ###### Dependancies:
-python-requests
+python-requests and python3-zeroconf
 You can use this command to install them:  
-> apt-get install python-requests
+> apt-get install python-requests python3-zeroconf
 
 
 ###### Usage:
