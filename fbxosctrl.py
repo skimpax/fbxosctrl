@@ -5,7 +5,7 @@
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "2.0.0"
+FBXOSCTRL_VERSION = "2.1.0"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -26,7 +26,7 @@ RC_WIFI_ON = 1
 g_app_desc = {
     "app_id": "fr.freebox.fbxosctrl",
     "app_name": "Skimpax FbxOSCtrl",
-    "app_version": FBXOSCTRL_VERSION,
+    "app_version": "2.0.0",
     "device_name": "FbxOS Client"
 }
 
@@ -517,6 +517,7 @@ LCD screen. This command shall be executed only once. """
                 print('Unexpected response: {}'.format(status))
 
         if register:
+            self._conf._load_addressing_params()
             uri = '/login/authorize/'
             data = self._conf.app_desc
             # post it
@@ -956,7 +957,8 @@ if __name__ == '__main__':
 
         args = cli.parse_args(sys.argv[1:])
 
-        ctrl.conf.load()
+        if not 'regapp' in args:
+            ctrl.conf.load()
 
         rc = cli.dispatch(args)
 
