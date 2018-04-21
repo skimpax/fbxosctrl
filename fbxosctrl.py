@@ -5,7 +5,17 @@
 # Nothing expected to be modified below this line... unless bugs fix ;-)
 ########################################################################
 
-FBXOSCTRL_VERSION = "2.1.0"
+import argparse
+import os
+import sys
+import json
+import requests
+import hmac
+from zeroconf import Zeroconf
+from datetime import datetime
+
+
+FBXOSCTRL_VERSION = "2.0.2"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -31,20 +41,7 @@ g_app_desc = {
 }
 
 
-import argparse
-import os
-import sys
-import json
-import requests
-import json
-import hmac
-from zeroconf import Zeroconf
-from datetime import datetime
-
-
 g_log_enabled = False
-
-"""General API Information."""
 
 
 def log(what):
@@ -119,26 +116,30 @@ class FbxConfiguration:
     def resp_as_json(self, resp_as_json):
         self._resp_as_json = resp_as_json
 
-    def load(self):
+    def load(self, want_regapp):
         """Load configuration params"""
         log('>>> load')
         self._load_addressing_params()
         self._load_registration_params()
 
         if self._reg_params is None:
-            print('No registration params found!')
-            print("You should launch 'fbxosctrl --regapp' once to register to the Freebox Server first.")
-            sys.exit(0)
-
-        url = self.freebox_address
-        print('Freebox Server is accessible via: {}'.format(url))
+            if not want_regapp:
+                print('No registration params found!')
+                print("You should launch 'fbxosctrl --regapp' once to register to the Freebox Server first.")
+                sys.exit(0)
+            else:
+                # use wants to register: this is normal not having reg params yet
+                pass
+        else:
+            url = self.freebox_address
+            print('Freebox Server is accessible via: {}'.format(url))
 
     def has_registration_params(self):
         """ Indicate whether registration params look initialized """
         log('>>> has_registration_params')
-        if (self._reg_params
-            and self._reg_params.get('track_id') is not None
-            and self._reg_params.get('app_token') is not ''):
+        if (self._reg_params and
+                self._reg_params.get('track_id') is not None and
+                self._reg_params.get('app_token') is not ''):
             return True
         else:
             return False
@@ -478,43 +479,46 @@ class FbxServiceAuth:
         else:
             return "Not registered yet!"
 
+    def get_registration_status_diagnostic(self):
+        """ Get the current registration status and display diagnosic """
+        log(">>> get_registration_status_diagnostic")
+        status = self.get_registration_status()
+        track_id = self._conf.reg_params.get('track_id')
+        if 'granted' == status:
+            print(
+                'This app is already granted on Freebox Server' +
+                ' (track_id={}).'.format(track_id) + ' You can now dialog with it.')
+        elif 'pending' == status:
+            print(
+                'This app grant is still pending: user should grant it' +
+                ' on Freebox Server lcd/touchpad (track_id = {}).'
+                .format(track_id))
+        elif 'unknown' == status:
+            print(
+                'This track_id ({}) is unknown by Freebox Server: '.format(track_id) +
+                'you have to register again to Freebox Server to get a new app_id.')
+        elif 'denied' == status:
+            print(
+                'This app has been denied by user on Freebox Server (track_id = {}).'
+                .format(self._conf.reg_params.get('track_id')))
+        elif 'timeout' == status:
+            print(
+                'Timeout occured for this app_id: you have to register again' +
+                ' to Freebox Server to get a new app_id (current track_id = {}).'
+                .format(track_id))
+        else:
+            print('Unexpected response: {}'.format(status))
+        return status
+
     def register_app(self):
         """ Register this app to FreeboxOS to that user grants this apps via Freebox Server
 LCD screen. This command shall be executed only once. """
         log(">>> register_app")
         register = True
         if self._conf.has_registration_params():
-            status = self.get_registration_status()
-            track_id = self.registration.get('track_id')
+            status = self.get_registration_status_diagnostic()
             if 'granted' == status:
-                print(
-                    'This app is already granted on Freebox Server (track_id = {}).' +
-                    ' You can now dialog with it.'
-                    .format(track_id))
                 register = False
-            elif 'pending' == status:
-                print(
-                    'This app grant is still pending: user should grant it' +
-                    ' on Freebox Server lcd/touchpad (track_id = {}).'
-                    .format(track_id))
-                register = False
-            elif 'unknown' == status:
-                print(
-                    'This track_id ({}) is unknown by Freebox Server: you have' +
-                    ' to register again to Freebox Server to get a new app_id.'
-                    .format(track_id))
-            elif 'denied' == status:
-                print(
-                    'This app has been denied by user on Freebox Server (track_id = {}).'
-                    .format(self._conf.reg_params.get('track_id')))
-                register = False
-            elif 'timeout' == status:
-                print(
-                    'Timeout occured for this app_id: you have to register again' +
-                    ' to Freebox Server to get a new app_id (current track_id = {}).'
-                    .format(track_id))
-            else:
-                print('Unexpected response: {}'.format(status))
 
         if register:
             self._conf._load_addressing_params()
@@ -525,12 +529,17 @@ LCD screen. This command shall be executed only once. """
 
             # save registration params
             if resp.success:
-                params = {'app_token': resp.result.get('app_token'),
-                'track_id': resp.result.get('track_id')}
+                params = {
+                    'app_token': resp.result.get('app_token'),
+                    'track_id': resp.result.get('track_id')}
                 self._conf.reg_params = params
                 print(
                     'Now you have to accept this app on your Freebox server:' +
-                    ' take a look on its lcd screen.')
+                    ' take a look on its LCD screen.')
+                print(input('Press Enter key once you have accepted on LCD screen: '))
+                # check new status (it seems to be mandatory to reach in 'granted' state)
+                status = self.get_registration_status_diagnostic()
+                print('{}'.format('OK' if 'granted' == status else 'NOK'))
             else:
                 print('NOK')
 
@@ -957,10 +966,9 @@ if __name__ == '__main__':
 
         args = cli.parse_args(sys.argv[1:])
 
-        if not 'regapp' in args:
-            ctrl.conf.load()
+        want_regapp = True if 'regapp' in args else False
+        ctrl.conf.load(want_regapp)
 
         rc = cli.dispatch(args)
 
         sys.exit(rc)
-
