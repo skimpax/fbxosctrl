@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime
 
 
-FBXOSCTRL_VERSION = "2.0.2"
+FBXOSCTRL_VERSION = "2.1.0"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -132,7 +132,9 @@ class FbxConfiguration:
                 pass
         else:
             url = self.freebox_address
-            print('Freebox Server is accessible via: {}'.format(url))
+            if not self.resp_as_json:
+                # print only if not in JSON format
+                print('Freebox Server is accessible via: {}'.format(url))
 
     def has_registration_params(self):
         """ Indicate whether registration params look initialized """
@@ -559,6 +561,24 @@ class FbxServiceSystem:
         self._http.post(uri, timeout=3)
         return True
 
+    def get_system_info(self):
+        """Retrieve the system info"""
+        uri = '/system'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        print('Server info:')
+        print(' - MAC:       {}'.format(resp.result['mac']))
+        print(' - Firmware:  {}'.format(resp.result['firmware_version']))
+        print(' - Uptime:    {}'.format(resp.result['uptime']))
+        print(' - Temp CPUb: {}'.format(resp.result['temp_cpub']))
+        print(' - Temp CPUm: {}'.format(resp.result['temp_cpum']))
+        print(' - Temp SW:   {}'.format(resp.result['temp_sw']))
+        print(' - Fan speed: {}'.format(resp.result['fan_rpm']))
+        return True
+
 
 class FbxServiceWifi:
     """Wifi domain"""
@@ -918,6 +938,11 @@ class FreeboxOSCli:
             default=argparse.SUPPRESS,
             action='store_true',
             help='reboot the Freebox Server now!')
+        group.add_argument(
+            '--sinfo',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the system information')
 
         # Configure cmd=>callback association
         self._cmd_handlers = {
@@ -933,6 +958,7 @@ class FreeboxOSCli:
             'cnew': self._ctrl.srv_call.get_new_calls_list,
             'cread': self._ctrl.srv_call.mark_calls_as_read,
             'reboot': self._ctrl.srv_system.reboot,
+            'sinfo': self._ctrl.srv_system.get_system_info,
         }
 
     def parse_args(self, argv):
