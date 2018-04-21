@@ -594,6 +594,65 @@ class FbxServiceSystem:
         return True
 
 
+class FbxServiceStorage:
+    """Storage domain"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
+
+    def get_connected_drives(self):
+        """Retrieve the spining state for drives"""
+        uri = '/storage/disk/'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        print('Drives connected :')
+        for drive in resp.result:
+            model = drive['model']
+            serial = drive['serial']
+
+            if model == "":
+                model = "_no_brand_"
+            if serial == "":
+                serial = "_no_serial_"
+
+            if drive['spinning'] == True:
+                print(' - {} ({}) - Spinning'.format(model, serial))
+            else:
+                print(' - {} ({})'.format(model, serial))
+        return True
+
+    def get_free_space(self):
+        """Retrieve the storage partitions and free space"""
+        uri = '/storage/disk/'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        print('Storage info:')
+        for drive in resp.result:
+            model = drive['model']
+            if model == "":
+                model = "_no_brand_"
+
+            print(' - {}'.format(model))
+            for part in drive['partitions']:
+                if part['total_bytes'] > pow(1024,3):
+                    total = part['total_bytes']/pow(1024,3)
+                    avail = part['free_bytes']/pow(1024,3)
+                    print('     #{0:15s} :\t{1:4.0f}Go /{2:4.0f}Go'.format(part['label'], avail, total))
+                else:
+                    total = part['total_bytes']/pow(1024,2)
+                    avail = part['free_bytes']/pow(1024,2)
+                    print('     #{0:15s} :\t{1:4.0f}Mo /{2:4.0f}Mo'.format(part['label'], avail, total))
+
+        return True
+
 class FbxServiceWifi:
     """Wifi domain"""
 
@@ -838,6 +897,7 @@ class FreeboxOSCtrl:
         self._http = FbxHttp(self._conf)
         self._srv_auth = FbxServiceAuth(self._http, self._conf)
         self._srv_system = FbxServiceSystem(self._http, self._conf)
+        self._srv_storage = FbxServiceStorage(self._http, self._conf)
         self._srv_wifi = FbxServiceWifi(self._http, self._conf)
         self._srv_dhcp = FbxServiceDhcp(self._http, self._conf)
         self._srv_call = FbxServiceCall(self._http, self._conf)
@@ -853,6 +913,10 @@ class FreeboxOSCtrl:
     @property
     def srv_system(self):
         return self._srv_system
+
+    @property
+    def srv_storage(self):
+        return self._srv_storage
 
     @property
     def srv_wifi(self):
@@ -963,6 +1027,16 @@ class FreeboxOSCli:
             default=argparse.SUPPRESS,
             action='store_true',
             help='display the system information')
+        group.add_argument(
+            '--dlist',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display connected drives')
+        group.add_argument(
+            '--dspace',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display free space on connected drives')
 
         # Configure cmd=>callback association
         self._cmd_handlers = {
@@ -979,6 +1053,8 @@ class FreeboxOSCli:
             'cread': self._ctrl.srv_call.mark_calls_as_read,
             'reboot': self._ctrl.srv_system.reboot,
             'sinfo': self._ctrl.srv_system.get_system_info,
+            'dlist': self._ctrl.srv_storage.get_connected_drives,
+            'dspace': self._ctrl.srv_storage.get_free_space,
         }
 
     def parse_args(self, argv):
