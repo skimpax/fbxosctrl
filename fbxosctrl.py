@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime
 
 
-FBXOSCTRL_VERSION = "2.1.0"
+FBXOSCTRL_VERSION = "2.1.1"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -78,6 +78,7 @@ class FbxConfiguration:
         self._addr_params = None
         self._reg_params = None
         self._resp_as_json = False
+        self._conf_path = '.'
 
     @property
     def freebox_address(self):
@@ -116,6 +117,19 @@ class FbxConfiguration:
     def resp_as_json(self, resp_as_json):
         self._resp_as_json = resp_as_json
 
+    @property
+    def conf_path(self):
+        return self._conf_path
+
+    @conf_path.setter
+    def conf_path(self, conf_path):
+        log('>>> conf_path: {}'.format(conf_path))
+        if conf_path.endswith('/'):
+            conf_path = conf_path[:-1]
+        self._conf_path = conf_path
+        self._addr_file = self._conf_path + '/' + self._addr_file
+        self._reg_file = self._conf_path + '/' + self._reg_file
+
     def load(self, want_regapp):
         """Load configuration params"""
         log('>>> load')
@@ -124,7 +138,7 @@ class FbxConfiguration:
 
         if self._reg_params is None:
             if not want_regapp:
-                print('No registration params found!')
+                print('No registration params found in directory: {}'.format(self._conf_path))
                 print("You should launch 'fbxosctrl --regapp' once to register to the Freebox Server first.")
                 sys.exit(0)
             else:
@@ -875,6 +889,12 @@ class FreeboxOSCli:
             '-j',
             action='store_true',
             help='simply print Freebox Server reponse in JSON format')
+        self._parser.add_argument(
+            '-c',
+            nargs=1,
+            dest='conf_path',
+            default='.',
+            help='path where to store/retrieve this app configuration files')
         # Real freeboxOS actions
         group = self._parser.add_mutually_exclusive_group(required=True)
         group.add_argument(
@@ -975,6 +995,14 @@ class FreeboxOSCli:
         if argsdict.get('j'):
             self._ctrl.conf.resp_as_json = True
         del argsdict['j']
+
+        # Set configuration path (local directory by default)
+        conf_path = argsdict.get('conf_path')[0]
+        if not os.path.isdir(conf_path):
+            print('Configuration direcory does not exist: {}'.format(conf_path))
+            sys.exit(1)
+        self._ctrl.conf.conf_path = conf_path
+        del argsdict['conf_path']
 
         return argsdict
 
