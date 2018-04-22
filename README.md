@@ -28,6 +28,7 @@ Supported services:
   - mark phone call as read
   - reboot the Freebox Server
   - display the system information
+  - get storage status
 
 
 #### Dependancies:
@@ -60,7 +61,7 @@ JSON format:
 
 ```bash
 usage: fbxosctrl.py [-h] [--version] [-v] [-j]
-                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --clist | --cnew | --cread | --reboot | --sinfo)
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --clist | --cnew | --cread | --reboot | --sinfo | --dlist | --dspace)
 
 Command line utility to control some FreeboxOS services.
 
@@ -83,4 +84,6 @@ optional arguments:
   --cread       set read status for all received calls
   --reboot      reboot the Freebox Server now!
   --sinfo       display the system information
+  --dlist       display connected drives
+  --dspace      display free space on connected drives
 ```
