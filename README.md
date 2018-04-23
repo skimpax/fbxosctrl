@@ -60,7 +60,7 @@ JSON format:
 #### Usage:
 
 ```bash
-usage: fbxosctrl.py [-h] [--version] [-v] [-j]
+usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH]
                     (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --clist | --cnew | --cread | --reboot | --sinfo | --dlist | --dspace)
 
 Command line utility to control some FreeboxOS services.
@@ -70,6 +70,8 @@ optional arguments:
   --version     show program's version number and exit
   -v            verbose mode
   -j            simply print Freebox Server reponse in JSON format
+  -c CONF_PATH  path where to store/retrieve this app configuration files
+                (default: local directory)
   --regapp      register this app to FreeboxOS and save result in
                 configuration file (to be executed only once)
   --wrstatus    get FreeboxOS current Wifi Radio status
@@ -85,5 +87,5 @@ optional arguments:
   --reboot      reboot the Freebox Server now!
   --sinfo       display the system information
   --dlist       display connected drives
-  --dspace      display free space on connected drives
+  --dspace      display spaces (total/used/free) on connected drives
 ```

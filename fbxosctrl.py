@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime
 
 
-FBXOSCTRL_VERSION = "2.1.1"
+FBXOSCTRL_VERSION = "2.2.0"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -615,19 +615,19 @@ class FbxServiceStorage:
             model = drive['model']
             serial = drive['serial']
 
-            if model == "":
-                model = "_no_brand_"
-            if serial == "":
-                serial = "_no_serial_"
+            if model == '':
+                model = '_no_brand_'
+            if serial == '':
+                serial = '_no_serial_'
 
-            if drive['spinning'] == True:
-                print(' - {} ({}) - Spinning'.format(model, serial))
-            else:
-                print(' - {} ({})'.format(model, serial))
+            temp = drive['temp']
+            spinning = drive['spinning']
+
+            print(' - {} ({}) | temp: {} | spining: {}'.format(model, serial, temp, spinning))
         return True
 
-    def get_free_space(self):
-        """Retrieve the storage partitions and free space"""
+    def get_storage_status(self):
+        """Retrieve the storage partitions and spaces"""
         uri = '/storage/disk/'
         resp = self._http.get(uri)
 
@@ -637,21 +637,30 @@ class FbxServiceStorage:
         print('Storage info:')
         for drive in resp.result:
             model = drive['model']
-            if model == "":
-                model = "_no_brand_"
+            if model == '':
+                model = '_no_brand_'
 
             print(' - {}'.format(model))
             for part in drive['partitions']:
-                if part['total_bytes'] > pow(1024,3):
-                    total = part['total_bytes']/pow(1024,3)
-                    avail = part['free_bytes']/pow(1024,3)
-                    print('     #{0:15s} :\t{1:4.0f}Go /{2:4.0f}Go'.format(part['label'], avail, total))
+                if part['total_bytes'] > pow(1024, 3):
+                    total = part['total_bytes']/pow(1024, 3)
+                    avail = part['free_bytes']/pow(1024, 3)
+                    used = part['used_bytes']/pow(1024, 3)
+                    unit = 'Go'
                 else:
-                    total = part['total_bytes']/pow(1024,2)
-                    avail = part['free_bytes']/pow(1024,2)
-                    print('     #{0:15s} :\t{1:4.0f}Mo /{2:4.0f}Mo'.format(part['label'], avail, total))
+                    total = part['total_bytes']/pow(1024, 2)
+                    avail = part['free_bytes']/pow(1024, 2)
+                    used = part['used_bytes']/pow(1024, 2)
+                    unit = 'Mo'
+                free_percent = avail * 100 / total
+                print('     #{:15s} :\t'.format(part['label']) +
+                    'total: {value:4.0f}{unit} |'.format(value=total, unit=unit) +
+                    ' used: {value:4.0f}{unit} |'.format(value=used, unit=unit) +
+                    ' free: {value:4.0f}{unit}'.format(value=avail, unit=unit) +
+                    ' ({value:.1f}{unit} free)'.format(value=free_percent, unit='%'))
 
         return True
+
 
 class FbxServiceWifi:
     """Wifi domain"""
@@ -958,7 +967,7 @@ class FreeboxOSCli:
             nargs=1,
             dest='conf_path',
             default='.',
-            help='path where to store/retrieve this app configuration files')
+            help='path where to store/retrieve this app configuration files (default: local directory)')
         # Real freeboxOS actions
         group = self._parser.add_mutually_exclusive_group(required=True)
         group.add_argument(
@@ -1036,7 +1045,7 @@ class FreeboxOSCli:
             '--dspace',
             default=argparse.SUPPRESS,
             action='store_true',
-            help='display free space on connected drives')
+            help='display spaces (total/used/free) on connected drives')
 
         # Configure cmd=>callback association
         self._cmd_handlers = {
@@ -1054,7 +1063,7 @@ class FreeboxOSCli:
             'reboot': self._ctrl.srv_system.reboot,
             'sinfo': self._ctrl.srv_system.get_system_info,
             'dlist': self._ctrl.srv_storage.get_connected_drives,
-            'dspace': self._ctrl.srv_storage.get_free_space,
+            'dspace': self._ctrl.srv_storage.get_storage_status,
         }
 
     def parse_args(self, argv):
