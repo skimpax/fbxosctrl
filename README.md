@@ -29,6 +29,7 @@ Supported services:
   - reboot the Freebox Server
   - display the system information
   - get storage status
+  - get downloads status
 
 
 #### Dependancies:
@@ -61,7 +62,7 @@ JSON format:
 
 ```bash
 usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH]
-                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --clist | --cnew | --cread | --reboot | --sinfo | --dlist | --dspace)
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --clist | --cnew | --cread | --reboot | --sinfo | --dlist | --dspace | --tlist)
 
 Command line utility to control some FreeboxOS services.
 
@@ -88,4 +89,16 @@ optional arguments:
   --sinfo       display the system information
   --dlist       display connected drives
   --dspace      display spaces (total/used/free) on connected drives
+  --tlist       display downloads list
+```
+
+#### Contributions:
+
+Contributions are welcome.
+Just ensure it passes the flake8 tool rules. It is expected that flake8 only complains about E501 rule (line larger than 79 chars) (ancestral rule in my opinion), and a single E122 ( for literal content of RSA certificate).
+All other non-conformance should be fixed.
+
+```bash
+apt-get install flake8
+flake8 fbxosctrl.py
 ```

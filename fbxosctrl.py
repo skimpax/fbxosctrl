@@ -12,10 +12,10 @@ import json
 import requests
 import hmac
 from zeroconf import Zeroconf
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
-FBXOSCTRL_VERSION = "2.2.0"
+FBXOSCTRL_VERSION = "2.3.0"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -389,8 +389,9 @@ class FbxHttp():
                 permissions = resp.result.get('permissions')
                 log('Permissions: {}'.format(permissions))
                 if not permissions.get('settings'):
-                    print("Warning: permission 'settings' has not been allowed yet \
-in FreeboxOS server. This script may fail!")
+                    print(
+                        "Warning: permission 'settings' has not been allowed yet" +
+                        ' in FreeboxOS server. This script may fail!')
             else:
                 raise FbxException('Session failure: {}'.format(resp))
 
@@ -653,7 +654,8 @@ class FbxServiceStorage:
                     used = part['used_bytes']/pow(1024, 2)
                     unit = 'Mo'
                 free_percent = avail * 100 / total
-                print('     #{:15s} :\t'.format(part['label']) +
+                print(
+                    '    #{:15s} :\t'.format(part['label']) +
                     'total: {value:4.0f}{unit} |'.format(value=total, unit=unit) +
                     ' used: {value:4.0f}{unit} |'.format(value=used, unit=unit) +
                     ' free: {value:4.0f}{unit}'.format(value=avail, unit=unit) +
@@ -804,7 +806,7 @@ class FbxServiceDhcp:
         for lease in leases:
             if lease.get('host').get('reachable'):
                 print(
-                    '  [{}]: mac: {}, ip: {}, hostname: {}, static: {}'
+                    '  #{}: mac: {}, ip: {}, hostname: {}, static: {}'
                     .format(
                         count, lease.get('mac'), lease.get('ip'),
                         lease.get('hostname'), lease.get('is_static')))
@@ -815,7 +817,7 @@ class FbxServiceDhcp:
         for lease in leases:
             if lease.get('host').get('reachable') is False:
                 print(
-                    '  [{}]: mac: {}, ip: {}, hostname: {}, static: {}'
+                    '  #{}: mac: {}, ip: {}, hostname: {}, static: {}'
                     .format(
                         count, lease.get('mac'), lease.get('ip'),
                         lease.get('hostname'), lease.get('is_static')))
@@ -898,6 +900,66 @@ class FbxServiceCall:
         return 0
 
 
+class FbxServiceDownload:
+    """Download domain"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
+
+    def get_downloads_list(self):
+        """ List downloads """
+        uri = '/downloads/'
+        resp = self._http.get(uri)
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        # json response format
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        count = 0
+        dls = resp.result
+        if dls:
+            dl = {}
+            dl['Torrents'] = [x for x in dls if x.get('type') == 'bt']
+            dl['HTTPs'] = [x for x in dls if x.get('type') == 'http']
+            dl['FTPs'] = [x for x in dls if x.get('type') == 'ftp']
+            dl['NewsGp'] = [x for x in dls if x.get('type') == 'nzb']
+            for dl_type in ['Torrents', 'HTTPs', 'FTPs', 'NewsGp']:
+                nb = 0
+                if len(dl[dl_type]):
+                    for data in dl[dl_type]:
+                        nb += 1
+                        eta = timedelta(seconds=data.get('eta')).__str__()
+                        rx_rate = data.get('rx_rate')
+                        if rx_rate > 1000000:
+                            rx_rate /= 1000000
+                            rx_unit = 'Mo/s'
+                        elif rx_rate > 1000:
+                            rx_rate /= 1000
+                            rx_unit = 'Ko/s'
+                        else:
+                            rx_unit = 'o/s'
+                        completion = data.get('rx_bytes') * 100 / data.get('size')
+                        print('{}:'.format(dl_type))
+                        print(
+                            '  #{}: name: {} |'.format(nb, data.get('name')) +
+                            ' tx_bytes: {} |'.format(data.get('tx_bytes')) +
+                            ' rx_bytes: {} ({:.1f}%) |'.format(data.get('rx_bytes'), completion) +
+                            ' rx_rate: {:.1f}{} |'.format(rx_rate, rx_unit) +
+                            ' ETA: {}'.format(eta))
+                else:
+                    print('{}:\t--'.format(dl_type))
+                count += nb
+        else:
+            print('No download currently.')
+
+        return count > 0
+
+
 class FreeboxOSCtrl:
     """"""
     def __init__(self):
@@ -907,6 +969,7 @@ class FreeboxOSCtrl:
         self._srv_auth = FbxServiceAuth(self._http, self._conf)
         self._srv_system = FbxServiceSystem(self._http, self._conf)
         self._srv_storage = FbxServiceStorage(self._http, self._conf)
+        self._srv_download = FbxServiceDownload(self._http, self._conf)
         self._srv_wifi = FbxServiceWifi(self._http, self._conf)
         self._srv_dhcp = FbxServiceDhcp(self._http, self._conf)
         self._srv_call = FbxServiceCall(self._http, self._conf)
@@ -926,6 +989,10 @@ class FreeboxOSCtrl:
     @property
     def srv_storage(self):
         return self._srv_storage
+
+    @property
+    def srv_download(self):
+        return self._srv_download
 
     @property
     def srv_wifi(self):
@@ -1046,6 +1113,11 @@ class FreeboxOSCli:
             default=argparse.SUPPRESS,
             action='store_true',
             help='display spaces (total/used/free) on connected drives')
+        group.add_argument(
+            '--tlist',  # 't' stands for 'téléchargement'
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display downloads list')
 
         # Configure cmd=>callback association
         self._cmd_handlers = {
@@ -1064,6 +1136,7 @@ class FreeboxOSCli:
             'sinfo': self._ctrl.srv_system.get_system_info,
             'dlist': self._ctrl.srv_storage.get_connected_drives,
             'dspace': self._ctrl.srv_storage.get_storage_status,
+            'tlist': self._ctrl.srv_download.get_downloads_list,
         }
 
     def parse_args(self, argv):
