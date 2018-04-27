@@ -644,14 +644,14 @@ class FbxServiceStorage:
             print(' - {}'.format(model))
             for part in drive['partitions']:
                 if part['total_bytes'] > pow(1024, 3):
-                    total = part['total_bytes']/pow(1024, 3)
-                    avail = part['free_bytes']/pow(1024, 3)
-                    used = part['used_bytes']/pow(1024, 3)
+                    total = part['total_bytes'] / pow(1024, 3)
+                    avail = part['free_bytes'] / pow(1024, 3)
+                    used = part['used_bytes'] / pow(1024, 3)
                     unit = 'Go'
                 else:
-                    total = part['total_bytes']/pow(1024, 2)
-                    avail = part['free_bytes']/pow(1024, 2)
-                    used = part['used_bytes']/pow(1024, 2)
+                    total = part['total_bytes'] / pow(1024, 2)
+                    avail = part['free_bytes'] / pow(1024, 2)
+                    used = part['used_bytes'] / pow(1024, 2)
                     unit = 'Mo'
                 free_percent = avail * 100 / total
                 print(
