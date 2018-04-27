@@ -9,7 +9,7 @@ import argparse
 import os
 import sys
 import json
-import requests
+import urllib.request
 import hmac
 from zeroconf import Zeroconf
 from datetime import datetime, timedelta
@@ -229,8 +229,6 @@ class FbxResponse:
             raise FbxException('Field success must be either true or false')
 
         if self._resp['success'] is False:
-            if self._resp.get('msg') is None:
-                raise FbxException('Mandatory error field missing: msg')
             if self._resp.get('error_code') is None:
                 raise FbxException('Mandatory error field missing: error_code')
 
@@ -298,18 +296,20 @@ class FbxHttp():
         url = self._conf.api_address(uri)
         log('GET url: {}'.format(url))
 
-        r = requests.get(
-            url,
-            verify=self._certificates_file,
-            headers=self.headers,
-            timeout=timeout if timeout is not None else self._http_timeout)
-        log('GET response: {}'.format(r.text))
+        req = urllib.request.Request(url, headers=self.headers, method='GET')
+        try:
+            with urllib.request.urlopen(
+                    req,
+                    timeout=timeout if timeout is not None else self._http_timeout,
+                    cafile=self._certificates_file) as response:
+                resp = response.read()
+        except urllib.error.HTTPError as e:
+            raise FbxException('GET error - http_status: {}'.format(e.code))
 
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxException('GET error - http_status: {} {}'.format(r.status_code, r.text))
+        jresp = resp.decode('utf-8')
+        log('GET response: {}'.format(jresp))
 
-        return FbxResponse.build(r.text)
+        return FbxResponse.build(jresp)
 
     def put(self, uri, data, timeout=None, no_login=False):
         """PUT request"""
@@ -321,19 +321,22 @@ class FbxHttp():
         jdata = json.dumps(data)
         log('PUT url: {} data: {}'.format(url, jdata))
 
-        r = requests.put(
-            url,
-            verify=self._certificates_file,
-            data=jdata,
-            headers=self.headers,
-            timeout=timeout if timeout is not None else self._http_timeout)
-        log('PUT response: {}'.format(r.text))
+        bdata = jdata.encode('utf-8')
+        req = urllib.request.Request(url, headers=self.headers, method='PUT')
+        try:
+            with urllib.request.urlopen(
+                    req,
+                    data=bdata,
+                    timeout=timeout if timeout is not None else self._http_timeout,
+                    cafile=self._certificates_file) as response:
+                resp = response.read()
+        except urllib.error.HTTPError as e:
+            raise FbxException('PUT error - http_status: {}'.format(e.code))
 
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxException('PUT error - http_status: {} {}'.format(r.status_code, r.text))
+        jresp = resp.decode('utf-8')
+        log('POST response: {}'.format(jresp))
 
-        return FbxResponse.build(r.text)
+        return FbxResponse.build(jresp)
 
     def post(self, uri, data, timeout=None, no_login=False):
         """POST request"""
@@ -345,19 +348,22 @@ class FbxHttp():
         jdata = json.dumps(data)
         log('POST url: {} data: {}'.format(url, jdata))
 
-        r = requests.post(
-            url,
-            verify=self._certificates_file,
-            data=jdata,
-            headers=self.headers,
-            timeout=timeout if timeout is not None else self._http_timeout)
-        log('POST response: {}'.format(r.text))
+        bdata = jdata.encode('utf-8')
+        req = urllib.request.Request(url, headers=self.headers, method='POST')
+        try:
+            with urllib.request.urlopen(
+                    req,
+                    data=bdata,
+                    timeout=timeout if timeout is not None else self._http_timeout,
+                    cafile=self._certificates_file) as response:
+                resp = response.read()
+        except urllib.error.HTTPError as e:
+            raise FbxException('POST error - http_status: {}'.format(e.code))
 
-        # ensure status_code is 200, else raise exception
-        if requests.codes.ok != r.status_code:
-            raise FbxException('POST error - http_status: {} {}'.format(r.status_code, r.text))
+        jresp = resp.decode('utf-8')
+        log('POST response: {}'.format(jresp))
 
-        return FbxResponse.build(r.text)
+        return FbxResponse.build(jresp)
 
     def _login(self):
         """ Login to FreeboxOS using API credentials """
@@ -708,7 +714,7 @@ class FbxServiceWifi:
         # PUT
         try:
             resp = self._http.put(uri, data=data, timeout=timeout)
-        except requests.exceptions.Timeout as exc:
+        except urllib.error.HTTPError as exc:
             if not set_on:
                 # If we are connected using wifi, disabling wifi will close connection
                 # thus PUT response will never be received: a timeout is expected
