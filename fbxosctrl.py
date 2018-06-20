@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime, timedelta
 
 
-FBXOSCTRL_VERSION = "2.3.0"
+FBXOSCTRL_VERSION = "2.3.1"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -335,7 +335,7 @@ class FbxHttp():
 
         return FbxResponse.build(r.text)
 
-    def post(self, uri, data, timeout=None, no_login=False):
+    def post(self, uri, data={}, timeout=None, no_login=False):
         """POST request"""
         log(">>> post")
         if not no_login:
