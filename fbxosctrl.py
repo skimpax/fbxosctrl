@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime, timedelta
 
 
-FBXOSCTRL_VERSION = "2.3.0"
+FBXOSCTRL_VERSION = "2.3.1"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -349,7 +349,7 @@ class FbxHttp():
 
         return FbxResponse.build(r.text)
 
-    def post(self, uri, data, timeout=None, no_login=False):
+    def post(self, uri, data={}, timeout=None, no_login=False):
         """POST request"""
         log(">>> post")
         if not no_login:
@@ -658,14 +658,14 @@ class FbxServiceStorage:
             print(' - {}'.format(model))
             for part in drive['partitions']:
                 if part['total_bytes'] > pow(1024, 3):
-                    total = part['total_bytes']/pow(1024, 3)
-                    avail = part['free_bytes']/pow(1024, 3)
-                    used = part['used_bytes']/pow(1024, 3)
+                    total = part['total_bytes'] / pow(1024, 3)
+                    avail = part['free_bytes'] / pow(1024, 3)
+                    used = part['used_bytes'] / pow(1024, 3)
                     unit = 'Go'
                 else:
-                    total = part['total_bytes']/pow(1024, 2)
-                    avail = part['free_bytes']/pow(1024, 2)
-                    used = part['used_bytes']/pow(1024, 2)
+                    total = part['total_bytes'] / pow(1024, 2)
+                    avail = part['free_bytes'] / pow(1024, 2)
+                    used = part['used_bytes'] / pow(1024, 2)
                     unit = 'Mo'
                 free_percent = avail * 100 / total
                 print(
