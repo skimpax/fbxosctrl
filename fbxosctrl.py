@@ -181,13 +181,13 @@ class FbxConfiguration:
             print('Unable to retrive configuration, assuming bridged mode')
             d = requests.get("http://mafreebox.freebox.fr/api_version")
             data = d.json()
-            print(data)
             class Info:
                 def __init__(self, properties):
                     self.properties = {
                                        b"api_domain":  b"mafreebox.freebox.fr",
-                                       b"port": b"80",
-                                       b"api_base_url": b"/api/"}
+                                       b"https_port": b"80",
+                                       b"api_base_url": b"/api/",
+                                       b"https_available": b""}
                     self.properties[b"api_version"] = str(properties.get("api_version", "3.0")).encode()
             info = Info(data)
         r.close()
@@ -587,7 +587,7 @@ class FbxServiceSystem:
         """ Reboot the freebox server now! """
         log(">>> reboot")
         uri = '/system/reboot/'
-        self._http.post(uri, timeout=3)
+        print(self._http.post(uri, timeout=3))
         return True
 
     def get_system_info(self):
