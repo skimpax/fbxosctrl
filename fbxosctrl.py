@@ -175,7 +175,21 @@ class FbxConfiguration:
     def _fetch_fbx_mdns_info_via_mdns(self):
         print('Querying mDNS about Freebox Server information...')
         r = Zeroconf()
-        info = r.get_service_info('_fbx-api._tcp.local.', 'Freebox Server._fbx-api._tcp.local.')
+        try:
+            info = r.get_service_info('_fbx-api._tcp.local.', 'Freebox Server._fbx-api._tcp.local.')
+        except:
+            print('Unable to retrive configuration, assuming bridged mode')
+            d = requests.get("http://mafreebox.freebox.fr/api_version")
+            data = d.json()
+            print(data)
+            class Info:
+                def __init__(self, properties):
+                    self.properties = {
+                                       b"api_domain":  b"mafreebox.freebox.fr",
+                                       b"port": b"80",
+                                       b"api_base_url": b"/api/"}
+                    self.properties[b"api_version"] = str(properties.get("api_version", "3.0")).encode()
+            info = Info(data)
         r.close()
         return info
 
