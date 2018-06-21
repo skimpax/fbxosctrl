@@ -587,7 +587,7 @@ class FbxServiceSystem:
         """ Reboot the freebox server now! """
         log(">>> reboot")
         uri = '/system/reboot/'
-        print(self._http.post(uri, timeout=3))
+        self._http.post(uri, timeout=3)
         return True
 
     def get_system_info(self):
