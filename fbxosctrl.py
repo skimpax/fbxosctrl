@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime, timedelta
 
 
-FBXOSCTRL_VERSION = "2.3.1"
+FBXOSCTRL_VERSION = "2.3.2"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -175,7 +175,21 @@ class FbxConfiguration:
     def _fetch_fbx_mdns_info_via_mdns(self):
         print('Querying mDNS about Freebox Server information...')
         r = Zeroconf()
-        info = r.get_service_info('_fbx-api._tcp.local.', 'Freebox Server._fbx-api._tcp.local.')
+        try:
+            info = r.get_service_info('_fbx-api._tcp.local.', 'Freebox Server._fbx-api._tcp.local.')
+        except:
+            print('Unable to retrive configuration, assuming bridged mode')
+            d = requests.get("http://mafreebox.freebox.fr/api_version")
+            data = d.json()
+            class Info:
+                def __init__(self, properties):
+                    self.properties = {
+                                       b"api_domain":  b"mafreebox.freebox.fr",
+                                       b"https_port": b"80",
+                                       b"api_base_url": b"/api/",
+                                       b"https_available": b""}
+                    self.properties[b"api_version"] = str(properties.get("api_version", "3.0")).encode()
+            info = Info(data)
         r.close()
         return info
 
@@ -186,7 +200,7 @@ class FbxConfiguration:
             json.dump(self._reg_params, of, indent=True, sort_keys=True)
 
     def _load_addressing_params(self):
-        """Load existing addressing params or get the via mDNS"""
+        """Load existing addressing params or get them via mDNS"""
         if os.path.exists(self._addr_file):
             with open(self._addr_file) as infile:
                 self._addr_params = json.load(infile)
