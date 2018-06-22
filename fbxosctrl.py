@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime, timedelta
 
 
-FBXOSCTRL_VERSION = "2.3.1"
+FBXOSCTRL_VERSION = "2.3.2"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2018, Christophe Lherieau"
@@ -200,7 +200,7 @@ class FbxConfiguration:
             json.dump(self._reg_params, of, indent=True, sort_keys=True)
 
     def _load_addressing_params(self):
-        """Load existing addressing params or get the via mDNS"""
+        """Load existing addressing params or get them via mDNS"""
         if os.path.exists(self._addr_file):
             with open(self._addr_file) as infile:
                 self._addr_params = json.load(infile)
