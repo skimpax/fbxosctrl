@@ -183,12 +183,12 @@ class FbxConfiguration:
             data = d.json()
             class Info:
                 def __init__(self, properties):
-                    self.properties = {
-                                       b"api_domain":  b"mafreebox.freebox.fr",
-                                       b"https_port": b"80",
-                                       b"api_base_url": b"/api/",
-                                       b"https_available": b""}
-                    self.properties[b"api_version"] = str(properties.get("api_version", "3.0")).encode()
+                    self.properties = {}
+                    self.properties['api_domain'] = d['api_domain']
+                    self.properties['https_available'] = d['https_available']
+                    self.properties['https_port'] = d['https_port']
+                    self.properties['api_base_url'] = d['api_base_url']
+                    self.properties['api_version'] = d['api_version']
             info = Info(data)
         r.close()
         return info
