@@ -174,23 +174,25 @@ class FbxConfiguration:
 
     def _fetch_fbx_mdns_info_via_mdns(self):
         print('Querying mDNS about Freebox Server information...')
-        r = Zeroconf()
+        info = {}
         try:
-            info = r.get_service_info('_fbx-api._tcp.local.', 'Freebox Server._fbx-api._tcp.local.')
+            r = Zeroconf()
+            serv_info = r.get_service_info('_fbx-api._tcp.local.', 'Freebox Server._fbx-api._tcp.local.')
+            info['api_domain'] = serv_info.properties[b'api_domain'].decode()
+            info['https_available'] = True if serv_info.properties[b'https_available'] == b'1' else False
+            info['https_port'] = int(serv_info.properties[b'https_port'])
+            info['api_base_url'] = serv_info.properties[b'api_base_url'].decode()
+            info['api_version'] = serv_info.properties[b'api_version'].decode()
+            r.close()
         except:
-            print('Unable to retrive configuration, assuming bridged mode')
+            print('Unable to retrieve configuration, assuming bridged mode')
             d = requests.get("http://mafreebox.freebox.fr/api_version")
             data = d.json()
-            class Info:
-                def __init__(self, properties):
-                    self.properties = {}
-                    self.properties['api_domain'] = d['api_domain']
-                    self.properties['https_available'] = d['https_available']
-                    self.properties['https_port'] = d['https_port']
-                    self.properties['api_base_url'] = d['api_base_url']
-                    self.properties['api_version'] = d['api_version']
-            info = Info(data)
-        r.close()
+            info['api_domain'] = data['api_domain']
+            info['https_available'] = data['https_available']
+            info['https_port'] = data['https_port']
+            info['api_base_url'] = data['api_base_url']
+            info['api_version'] = data['api_version']
         return info
 
     def _save_registration_params(self):
@@ -209,11 +211,11 @@ class FbxConfiguration:
             mdns_info = self._fetch_fbx_mdns_info_via_mdns()
             log('Freebox mDNS info: {}'.format(mdns_info))
             self._addr_params = {}
-            self._addr_params['protocol'] = 'https' if mdns_info.properties[b'https_available'].decode() else 'http'
-            self._addr_params['api_domain'] = mdns_info.properties[b'api_domain'].decode()
-            self._addr_params['port'] = mdns_info.properties[b'https_port'].decode()
-            self._addr_params['api_base_url'] = mdns_info.properties[b'api_base_url'].decode()
-            self._addr_params['api_version'] = mdns_info.properties[b'api_version'].decode()
+            self._addr_params['protocol'] = 'https' if mdns_info['https_available'] else 'http'
+            self._addr_params['api_domain'] = mdns_info['api_domain']
+            self._addr_params['port'] = mdns_info['https_port']
+            self._addr_params['api_base_url'] = mdns_info['api_base_url']
+            self._addr_params['api_version'] = mdns_info['api_version']
             with open(self._addr_file, 'w') as of:
                 json.dump(self._addr_params, of, indent=True, sort_keys=True)
 
