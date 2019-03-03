@@ -599,13 +599,14 @@ class FbxServiceSystem:
             return resp.whole_content
 
         print('Server info:')
+        print(' - Model:     {}'.format(resp.result['model_info']['pretty_name']))
         print(' - MAC:       {}'.format(resp.result['mac']))
         print(' - Firmware:  {}'.format(resp.result['firmware_version']))
         print(' - Uptime:    {}'.format(resp.result['uptime']))
-        print(' - Temp CPUb: {}'.format(resp.result['temp_cpub']))
-        print(' - Temp CPUm: {}'.format(resp.result['temp_cpum']))
-        print(' - Temp SW:   {}'.format(resp.result['temp_sw']))
-        print(' - Fan speed: {}'.format(resp.result['fan_rpm']))
+        print(' - Sensors:')
+        for sensor in resp.result['sensors']:
+            unit = '°C' if sensor['id'].startswith('temp_') else ''
+            print('   - {:20} {}{}'.format(sensor['name'] + ':', sensor['value'], unit))
         return True
 
 
