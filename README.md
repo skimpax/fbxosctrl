@@ -28,6 +28,8 @@ Supported services:
   - mark phone call as read
   - reboot the Freebox Server
   - display the system information
+  - display the line ethernet information (bit rates)
+  - display the line media information (xDSL/FTTH)
   - get storage status
   - get downloads status
 
@@ -45,13 +47,15 @@ By using option '-j', output is printed in JSON format, containing the whole Fre
 Default format:
 ```
 Server info:
- - MAC:       68:A3:00:01:02:03
- - Firmware:  3.5.2
- - Uptime:    1 jour 1 heure 42 minutes 52 secondes
- - Temp CPUb: 61
- - Temp CPUm: 66
- - Temp SW:   55
- - Fan speed: 2567
+ - Model:     Freebox Server (r2)
+ - MAC:       68:A3:78:01:02:03
+ - Firmware:  4.0.4
+ - Uptime:    9 jours 51 minutes 56 secondes
+ - Sensors:
+   - Disque dur:          37°C
+   - Température Switch:  53°C
+   - Température CPU M:   63°C
+   - Température CPU B:   58°C
 ```
 JSON format:
 ```
@@ -87,6 +91,8 @@ optional arguments:
   --cread       set read status for all received calls
   --reboot      reboot the Freebox Server now!
   --sinfo       display the system information
+  --einfo       display the line ethernet information
+  --linfo       display the line media (xDSL/Fiber) information
   --dlist       display connected drives
   --dspace      display spaces (total/used/free) on connected drives
   --tlist       display downloads list

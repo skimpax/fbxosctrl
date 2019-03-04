@@ -610,6 +610,103 @@ class FbxServiceSystem:
         return True
 
 
+class FbxServiceConnection:
+    """Connection domain"""
+
+    @staticmethod
+    def rate_to_human_readable(bps):
+        """Convert bits per seconds to human readable format"""
+        if bps > 1000000:
+            return '{:.2f} Mb/s ({:.1f} MB/s)'.format(bps/1000000, bps/1000000/8)
+        elif bps > 1000:
+            return '{:.1f} Kb/s ({:.1f} KB/s)'.format(bps/1000, bps/1000/8)
+        elif bps:
+            return '{} b/s ({} B/s)'.format(bps, bps/8)
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
+
+    def get_line_ethernet_info(self):
+        uri = '/connection'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        print('Ethernet info:')
+        print(' - Info:')
+        print('   - IPv4:   {}'.format(resp.result['ipv4']))
+        print('   - IPv6:   {}'.format(resp.result['ipv6']))
+        print('   - Media:  {}'.format(resp.result['media']))
+        print('   - State:  {}'.format(resp.result['state']))
+        print(' - Down:')
+        print('   - Bandwidth:     {}'
+            .format(FbxServiceConnection.rate_to_human_readable(resp.result['bandwidth_down'])))
+        print('   - Current rate:  {}'
+            .format(FbxServiceConnection.rate_to_human_readable(resp.result['rate_down'])))
+        print(' - Up:')
+        print('   - Bandwidth:     {}'
+            .format(FbxServiceConnection.rate_to_human_readable(resp.result['bandwidth_up'])))
+        print('   - Current rate:  {}'
+            .format(FbxServiceConnection.rate_to_human_readable(resp.result['rate_up'])))
+        return True
+
+    def get_line_media_info(self):
+        """Retieve xDSL or FTTH info"""
+        uri = '/connection'
+        resp = self._http.get(uri)
+
+        if resp.result['media'] == 'ftth':
+            return self._get_ftth_info()
+        else:
+            return self._get_xdsl_info()
+
+    def _get_xdsl_info(self):
+        """Retrieve the xDSL info"""
+        uri = '/connection/xdsl'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        print('xDSL info:')
+        print(' - Status:')
+        for k,v in resp.result['status'].items():
+            print('   - {:13} {}'.format(k+':', v))
+        down = resp.result['down']
+        print(' - Down:')
+        print('   - Max Rate:     {}'
+            .format(FbxServiceConnection.rate_to_human_readable(down['rate']*1000)))
+        print('   - Attenuation:  {} dB'.format(down['attn_10']/10))
+        print('   - Noise magin:  {} dB'.format(down['snr_10']/10))
+        up = resp.result['up']
+        print(' - Up:')
+        print('   - Max Rate:     {}'
+            .format(FbxServiceConnection.rate_to_human_readable(up['rate']*1000)))
+        print('   - Attenuation:  {} dB'.format(up['attn_10']/10))
+        print('   - Noise magin:  {} dB'.format(up['snr_10']/10))
+        return True
+
+    def _get_ftth_info(self):
+        """Retrieve the FTTH info"""
+        uri = '/connection/ftth'
+        resp = self._http.get(uri)
+
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        print('Server info:')
+        print(' - Model:     {}'.format(resp.result['model_info']['pretty_name']))
+        print(' - MAC:       {}'.format(resp.result['mac']))
+        print(' - Firmware:  {}'.format(resp.result['firmware_version']))
+        print(' - Uptime:    {}'.format(resp.result['uptime']))
+        print(' - Sensors:')
+        for k,v in resp.result.items():
+            print(' - {:25} {}'.format(k, v))
+        return True
+
 class FbxServiceStorage:
     """Storage domain"""
 
@@ -983,6 +1080,7 @@ class FreeboxOSCtrl:
         self._http = FbxHttp(self._conf)
         self._srv_auth = FbxServiceAuth(self._http, self._conf)
         self._srv_system = FbxServiceSystem(self._http, self._conf)
+        self._srv_connection = FbxServiceConnection(self._http, self._conf)
         self._srv_storage = FbxServiceStorage(self._http, self._conf)
         self._srv_download = FbxServiceDownload(self._http, self._conf)
         self._srv_wifi = FbxServiceWifi(self._http, self._conf)
@@ -1000,6 +1098,10 @@ class FreeboxOSCtrl:
     @property
     def srv_system(self):
         return self._srv_system
+
+    @property
+    def srv_connection(self):
+        return self._srv_connection
 
     @property
     def srv_storage(self):
@@ -1119,6 +1221,16 @@ class FreeboxOSCli:
             action='store_true',
             help='display the system information')
         group.add_argument(
+            '--einfo',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the line ethernet information')
+        group.add_argument(
+            '--linfo',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the line media (ADSL/Fiber) information')
+        group.add_argument(
             '--dlist',
             default=argparse.SUPPRESS,
             action='store_true',
@@ -1149,6 +1261,8 @@ class FreeboxOSCli:
             'cread': self._ctrl.srv_call.mark_calls_as_read,
             'reboot': self._ctrl.srv_system.reboot,
             'sinfo': self._ctrl.srv_system.get_system_info,
+            'einfo': self._ctrl.srv_connection.get_line_ethernet_info,
+            'linfo': self._ctrl.srv_connection.get_line_media_info,
             'dlist': self._ctrl.srv_storage.get_connected_drives,
             'dspace': self._ctrl.srv_storage.get_storage_status,
             'tlist': self._ctrl.srv_download.get_downloads_list,
