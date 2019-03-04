@@ -574,6 +574,7 @@ LCD screen. This command shall be executed only once. """
                 status = self.get_registration_status_diagnostic()
                 print('{}'.format('OK' if 'granted' == status else 'NOK'))
             else:
+                print('Reg Response: {}'.format(resp.whole_content))
                 print('NOK')
 
 
