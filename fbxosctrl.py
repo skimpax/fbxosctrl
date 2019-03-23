@@ -483,6 +483,21 @@ S27oDfFq04XSox7JM9HdTt2hLK96x1T7FpFrBTnALzb7vHv9MhXqAT90fPR/8A==
 -----END CERTIFICATE-----
 """)
 
+class FbxService:
+    """"Service base class"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        self._http = http
+        self._conf = conf
+
+    def get_service_data(self, uri):
+        """Get service data"""
+        resp = self._http.get(uri)
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        return resp
 
 class FbxServiceAuth:
     """"Authentication domain"""
