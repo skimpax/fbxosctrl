@@ -915,26 +915,32 @@ class FbxServiceDhcp:
             print('No DHCP leases')
             return 0
 
+        def display_lease_entry(count, lease):
+            print(
+                '  #{}: mac: {}, ip: {}, hostname: {}, static: {}'
+                .format(
+                    count, lease.get('mac'), lease.get('ip'),
+                    lease.get('hostname'), lease.get('is_static')))
+
         count = 1
         print('List of reachable leases:')
         for lease in leases:
-            if lease.get('host').get('reachable'):
-                print(
-                    '  #{}: mac: {}, ip: {}, hostname: {}, static: {}'
-                    .format(
-                        count, lease.get('mac'), lease.get('ip'),
-                        lease.get('hostname'), lease.get('is_static')))
+            if 'host' in lease and lease.get('host').get('reachable'):
+                display_lease_entry(count, lease)
                 count += 1
 
         count = 1
         print('List of unreachable leases:')
         for lease in leases:
-            if lease.get('host').get('reachable') is False:
-                print(
-                    '  #{}: mac: {}, ip: {}, hostname: {}, static: {}'
-                    .format(
-                        count, lease.get('mac'), lease.get('ip'),
-                        lease.get('hostname'), lease.get('is_static')))
+            if 'host' in lease and not lease.get('host').get('reachable'):
+                display_lease_entry(count, lease)
+                count += 1
+
+        count = 1
+        print('List of other leases:')
+        for lease in leases:
+            if not 'host' in lease:
+                display_lease_entry(count, lease)
                 count += 1
         return 0
 
