@@ -184,7 +184,7 @@ class FbxConfiguration:
             info['api_base_url'] = serv_info.properties[b'api_base_url'].decode()
             info['api_version'] = serv_info.properties[b'api_version'].decode()
             r.close()
-        except:
+        except Exception:
             print('Unable to retrieve configuration, assuming bridged mode')
             d = requests.get("http://mafreebox.freebox.fr/api_version")
             data = d.json()
@@ -644,14 +644,18 @@ class FbxServiceConnection:
         print('   - Media:  {}'.format(resp.result['media']))
         print('   - State:  {}'.format(resp.result['state']))
         print(' - Down:')
-        print('   - Bandwidth:     {}'
+        print(
+            '   - Bandwidth:     {}'
             .format(FbxServiceConnection.rate_to_human_readable(resp.result['bandwidth_down'])))
-        print('   - Current rate:  {}'
+        print(
+            '   - Current rate:  {}'
             .format(FbxServiceConnection.rate_to_human_readable(resp.result['rate_down'])))
         print(' - Up:')
-        print('   - Bandwidth:     {}'
+        print(
+            '   - Bandwidth:     {}'
             .format(FbxServiceConnection.rate_to_human_readable(resp.result['bandwidth_up'])))
-        print('   - Current rate:  {}'
+        print(
+            '   - Current rate:  {}'
             .format(FbxServiceConnection.rate_to_human_readable(resp.result['rate_up'])))
         return True
 
@@ -675,17 +679,19 @@ class FbxServiceConnection:
 
         print('xDSL info:')
         print(' - Status:')
-        for k,v in resp.result['status'].items():
+        for k, v in resp.result['status'].items():
             print('   - {:13} {}'.format(k+':', v))
         down = resp.result['down']
         print(' - Down:')
-        print('   - Max Rate:     {}'
+        print(
+            '   - Max Rate:     {}'
             .format(FbxServiceConnection.rate_to_human_readable(down['rate']*1000)))
         print('   - Attenuation:  {} dB'.format(down['attn_10']/10))
         print('   - Noise magin:  {} dB'.format(down['snr_10']/10))
         up = resp.result['up']
         print(' - Up:')
-        print('   - Max Rate:     {}'
+        print(
+            '   - Max Rate:     {}'
             .format(FbxServiceConnection.rate_to_human_readable(up['rate']*1000)))
         print('   - Attenuation:  {} dB'.format(up['attn_10']/10))
         print('   - Noise magin:  {} dB'.format(up['snr_10']/10))
@@ -705,9 +711,10 @@ class FbxServiceConnection:
         print(' - Firmware:  {}'.format(resp.result['firmware_version']))
         print(' - Uptime:    {}'.format(resp.result['uptime']))
         print(' - Sensors:')
-        for k,v in resp.result.items():
+        for k, v in resp.result.items():
             print(' - {:25} {}'.format(k, v))
         return True
+
 
 class FbxServiceStorage:
     """Storage domain"""
@@ -939,7 +946,7 @@ class FbxServiceDhcp:
         count = 1
         print('List of other leases:')
         for lease in leases:
-            if not 'host' in lease:
+            if 'host' not in lease:
                 display_lease_entry(count, lease)
                 count += 1
         return 0
