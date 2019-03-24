@@ -483,6 +483,7 @@ S27oDfFq04XSox7JM9HdTt2hLK96x1T7FpFrBTnALzb7vHv9MhXqAT90fPR/8A==
 -----END CERTIFICATE-----
 """)
 
+
 class FbxService:
     """"Service base class"""
 
@@ -499,13 +500,13 @@ class FbxService:
 
         return resp
 
-class FbxServiceAuth:
+        
+class FbxServiceAuth(FbxService):
     """"Authentication domain"""
 
     def __init__(self, http, conf):
         """Constructor"""
-        self._http = http
-        self._conf = conf
+        super().__init__(http, conf)
         self._registered = False
 
     def is_registered(self):
@@ -592,13 +593,8 @@ LCD screen. This command shall be executed only once. """
                 print('NOK')
 
 
-class FbxServiceSystem:
+class FbxServiceSystem(FbxService):
     """System domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def reboot(self):
         """ Reboot the freebox server now! """
@@ -627,7 +623,7 @@ class FbxServiceSystem:
         return True
 
 
-class FbxServiceConnection:
+class FbxServiceConnection(FbxService):
     """Connection domain"""
 
     @staticmethod
@@ -639,11 +635,6 @@ class FbxServiceConnection:
             return '{:.1f} Kb/s ({:.1f} KB/s)'.format(bps/1000, bps/1000/8)
         elif bps:
             return '{} b/s ({} B/s)'.format(bps, bps/8)
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_line_ethernet_info(self):
         uri = '/connection'
@@ -731,13 +722,8 @@ class FbxServiceConnection:
         return True
 
 
-class FbxServiceStorage:
+class FbxServiceStorage(FbxService):
     """Storage domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_connected_drives(self):
         """Retrieve the spining state for drives"""
@@ -800,13 +786,8 @@ class FbxServiceStorage:
         return True
 
 
-class FbxServiceWifi:
+class FbxServiceWifi(FbxService):
     """Wifi domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_wifi_config(self):
         """Get the current wifi config"""
@@ -903,13 +884,8 @@ class FbxServiceWifi:
         return is_on
 
 
-class FbxServiceDhcp:
+class FbxServiceDhcp(FbxService):
     """DHCP domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_config(self):
         """Get the current DHCP config"""
@@ -967,13 +943,8 @@ class FbxServiceDhcp:
         return 0
 
 
-class FbxServiceCall:
+class FbxServiceCall(FbxService):
     """Call domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_new_calls_list(self):
         """ List new calls """
@@ -1042,13 +1013,8 @@ class FbxServiceCall:
         return 0
 
 
-class FbxServiceDownload:
+class FbxServiceDownload(FbxService):
     """Download domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_downloads_list(self):
         """ List downloads """
