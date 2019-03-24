@@ -484,13 +484,29 @@ S27oDfFq04XSox7JM9HdTt2hLK96x1T7FpFrBTnALzb7vHv9MhXqAT90fPR/8A==
 """)
 
 
-class FbxServiceAuth:
-    """"Authentication domain"""
+class FbxService:
+    """"Service base class"""
 
     def __init__(self, http, conf):
         """Constructor"""
         self._http = http
         self._conf = conf
+
+    def get_service_data(self, uri):
+        """Get service data"""
+        resp = self._http.get(uri)
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        return resp
+
+
+class FbxServiceAuth(FbxService):
+    """"Authentication domain"""
+
+    def __init__(self, http, conf):
+        """Constructor"""
+        super().__init__(http, conf)
         self._registered = False
 
     def is_registered(self):
@@ -577,13 +593,8 @@ LCD screen. This command shall be executed only once. """
                 print('NOK')
 
 
-class FbxServiceSystem:
+class FbxServiceSystem(FbxService):
     """System domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def reboot(self):
         """ Reboot the freebox server now! """
@@ -612,7 +623,7 @@ class FbxServiceSystem:
         return True
 
 
-class FbxServiceConnection:
+class FbxServiceConnection(FbxService):
     """Connection domain"""
 
     @staticmethod
@@ -624,11 +635,6 @@ class FbxServiceConnection:
             return '{:.1f} Kb/s ({:.1f} KB/s)'.format(bps/1000, bps/1000/8)
         elif bps:
             return '{} b/s ({} B/s)'.format(bps, bps/8)
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_line_ethernet_info(self):
         uri = '/connection'
@@ -716,13 +722,8 @@ class FbxServiceConnection:
         return True
 
 
-class FbxServiceStorage:
+class FbxServiceStorage(FbxService):
     """Storage domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_connected_drives(self):
         """Retrieve the spining state for drives"""
@@ -785,13 +786,8 @@ class FbxServiceStorage:
         return True
 
 
-class FbxServiceWifi:
+class FbxServiceWifi(FbxService):
     """Wifi domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_wifi_config(self):
         """Get the current wifi config"""
@@ -888,13 +884,8 @@ class FbxServiceWifi:
         return is_on
 
 
-class FbxServiceDhcp:
+class FbxServiceDhcp(FbxService):
     """DHCP domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_config(self):
         """Get the current DHCP config"""
@@ -952,13 +943,47 @@ class FbxServiceDhcp:
         return 0
 
 
-class FbxServiceCall:
-    """Call domain"""
+class FbxServicePortForwarding(FbxService):
+    """Port Forwarding"""
 
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
+    def get_port_forwardings(self):
+        """ List the port forwarding on going"""
+        uri = '/fw/redir/'
+        resp = self._http.get(uri)
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        # json response format
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        # human response format
+        pforwardings = resp.result
+        if pforwardings is None:
+            print('No port forwarding')
+            return 0
+
+        def display_port_forwarding_entry(count, pforwarding):
+            data = '  #{}: id: {}, enabled: {}, hostname: {}, comment: {},\n'
+            data += '       lan_port: {}, wan_port_start: {}, wan_port_end: {}\n'
+            data += '       src_ip: {}, lan_ip: {}, ip_proto: {}'
+            print(data.format(
+                    count, pforwarding.get('id'), pforwarding.get('enabled'),
+                    pforwarding.get('hostname'), pforwarding.get('comment'), pforwarding.get('lan_port'),
+                    pforwarding.get('wan_port_start'), pforwarding.get('wan_port_end'),
+                    pforwarding.get('src_ip'), pforwarding.get('lan_ip'), pforwarding.get('ip_proto')))
+
+        count = 1
+        print('List of reachable leases:')
+        for pforwarding in pforwardings:
+            display_port_forwarding_entry(count, pforwarding)
+            count += 1
+        return 0
+
+
+class FbxServiceCall(FbxService):
+    """Call domain"""
 
     def get_new_calls_list(self):
         """ List new calls """
@@ -1027,13 +1052,8 @@ class FbxServiceCall:
         return 0
 
 
-class FbxServiceDownload:
+class FbxServiceDownload(FbxService):
     """Download domain"""
-
-    def __init__(self, http, conf):
-        """Constructor"""
-        self._http = http
-        self._conf = conf
 
     def get_downloads_list(self):
         """ List downloads """
@@ -1101,6 +1121,7 @@ class FreeboxOSCtrl:
         self._srv_wifi = FbxServiceWifi(self._http, self._conf)
         self._srv_dhcp = FbxServiceDhcp(self._http, self._conf)
         self._srv_call = FbxServiceCall(self._http, self._conf)
+        self._srv_pfw = FbxServicePortForwarding(self._http, self._conf)
 
     @property
     def conf(self):
@@ -1137,6 +1158,10 @@ class FreeboxOSCtrl:
     @property
     def srv_call(self):
         return self._srv_call
+
+    @property
+    def srv_port(self):
+        return self._srv_pfw
 
 
 class FreeboxOSCli:
@@ -1211,6 +1236,11 @@ class FreeboxOSCli:
             action='store_true',
             help='display the current DHCP leases info')
         group.add_argument(
+            '--portforwardings',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the list of port forwardings info')
+        group.add_argument(
             '--clist',
             default=argparse.SUPPRESS,
             action='store_true',
@@ -1271,6 +1301,7 @@ class FreeboxOSCli:
             'wpon': self._ctrl.srv_wifi.set_wifi_planning_on,
             'wpoff': self._ctrl.srv_wifi.set_wifi_planning_off,
             'dhcpleases': self._ctrl.srv_dhcp.get_dhcp_leases,
+            'portforwardings': self._ctrl.srv_port.get_port_forwardings,
             'clist': self._ctrl.srv_call.get_all_calls_list,
             'cnew': self._ctrl.srv_call.get_new_calls_list,
             'cread': self._ctrl.srv_call.mark_calls_as_read,
