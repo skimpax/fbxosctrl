@@ -500,7 +500,7 @@ class FbxService:
 
         return resp
 
-        
+
 class FbxServiceAuth(FbxService):
     """"Authentication domain"""
 
@@ -943,6 +943,45 @@ class FbxServiceDhcp(FbxService):
         return 0
 
 
+class FbxServicePortForwarding(FbxService):
+    """Port Forwarding"""
+
+    def get_port_forwardings(self):
+        """ List the port forwarding on going"""
+        uri = '/fw/redir/'
+        resp = self._http.get(uri)
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        # json response format
+        if self._conf.resp_as_json:
+            return resp.whole_content
+
+        # human response format
+        pforwardings = resp.result
+        if pforwardings is None:
+            print('No port forwarding')
+            return 0
+
+        def display_port_forwarding_entry(count, pforwarding):
+            data = '  #{}: id: {}, enabled: {}, hostname: {}, comment: {},\n'
+            data += '       lan_port: {}, wan_port_start: {}, wan_port_end: {}\n'
+            data += '       src_ip: {}, lan_ip: {}, ip_proto: {}'
+            print(data.format(
+                    count, pforwarding.get('id'), pforwarding.get('enabled'),
+                    pforwarding.get('hostname'), pforwarding.get('comment'), pforwarding.get('lan_port'),
+                    pforwarding.get('wan_port_start'), pforwarding.get('wan_port_end'),
+                    pforwarding.get('src_ip'), pforwarding.get('lan_ip'), pforwarding.get('ip_proto')))
+
+        count = 1
+        print('List of reachable leases:')
+        for pforwarding in pforwardings:
+            display_port_forwarding_entry(count, pforwarding)
+            count += 1
+        return 0
+
+
 class FbxServiceCall(FbxService):
     """Call domain"""
 
@@ -1082,6 +1121,7 @@ class FreeboxOSCtrl:
         self._srv_wifi = FbxServiceWifi(self._http, self._conf)
         self._srv_dhcp = FbxServiceDhcp(self._http, self._conf)
         self._srv_call = FbxServiceCall(self._http, self._conf)
+        self._srv_pfw = FbxServicePortForwarding(self._http, self._conf)
 
     @property
     def conf(self):
@@ -1118,6 +1158,10 @@ class FreeboxOSCtrl:
     @property
     def srv_call(self):
         return self._srv_call
+
+    @property
+    def srv_port(self):
+        return self._srv_pfw
 
 
 class FreeboxOSCli:
@@ -1192,6 +1236,11 @@ class FreeboxOSCli:
             action='store_true',
             help='display the current DHCP leases info')
         group.add_argument(
+            '--portforwardings',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the list of port forwardings info')
+        group.add_argument(
             '--clist',
             default=argparse.SUPPRESS,
             action='store_true',
@@ -1252,6 +1301,7 @@ class FreeboxOSCli:
             'wpon': self._ctrl.srv_wifi.set_wifi_planning_on,
             'wpoff': self._ctrl.srv_wifi.set_wifi_planning_off,
             'dhcpleases': self._ctrl.srv_dhcp.get_dhcp_leases,
+            'portforwardings': self._ctrl.srv_port.get_port_forwardings,
             'clist': self._ctrl.srv_call.get_all_calls_list,
             'cnew': self._ctrl.srv_call.get_new_calls_list,
             'cread': self._ctrl.srv_call.mark_calls_as_read,
