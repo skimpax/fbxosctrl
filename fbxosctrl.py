@@ -1236,7 +1236,7 @@ class FreeboxOSCli:
             action='store_true',
             help='display the current DHCP leases info')
         group.add_argument(
-            '--portforwardings',
+            '--pfwd',
             default=argparse.SUPPRESS,
             action='store_true',
             help='display the list of port forwardings info')
@@ -1301,7 +1301,7 @@ class FreeboxOSCli:
             'wpon': self._ctrl.srv_wifi.set_wifi_planning_on,
             'wpoff': self._ctrl.srv_wifi.set_wifi_planning_off,
             'dhcpleases': self._ctrl.srv_dhcp.get_dhcp_leases,
-            'portforwardings': self._ctrl.srv_port.get_port_forwardings,
+            'pfwd': self._ctrl.srv_port.get_port_forwardings,
             'clist': self._ctrl.srv_call.get_all_calls_list,
             'cnew': self._ctrl.srv_call.get_new_calls_list,
             'cread': self._ctrl.srv_call.mark_calls_as_read,
