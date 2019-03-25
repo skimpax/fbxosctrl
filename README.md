@@ -66,7 +66,7 @@ JSON format:
 
 ```bash
 usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH]
-                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --clist | --cnew | --cread | --reboot | --sinfo | --dlist | --dspace | --tlist)
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --pfwd | --clist | --cnew | --cread | --reboot | --sinfo | --einfo | --linfo | --dlist | --dspace | --tlist)
 
 Command line utility to control some FreeboxOS services.
 
