@@ -484,6 +484,150 @@ S27oDfFq04XSox7JM9HdTt2hLK96x1T7FpFrBTnALzb7vHv9MhXqAT90fPR/8A==
 """)
 
 
+class FbxCall:
+    """Call object"""
+
+    def __init__(self, ctrl, data):
+        """Constructor"""
+        self._ctrl = ctrl
+        self._timestamp = data.get('datetime')
+        self._duration = data.get('duration')
+        self._number = data.get('number')
+        self._name = data.get('name')
+        self._id = data.get('id')
+        self._new = data.get('new')
+        self._status = data.get('type')
+        self._contact_id = data.get('contact_id')
+
+    def _setnew(self, value):
+
+        # PUT new value
+        uri = '/call/log/{}'.format(self.id)
+        data = {'new': value}
+
+        # PUT
+        try:
+            resp = self._ctrl._http.put(uri, data=data, no_login=False)
+        except requests.exceptions.Timeout as exc:
+            raise exc
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+    def sql_build(self, replace=False):
+        str_replace = u'REPLACE' if replace else u'INSERT'
+        fields = u'`id`, `type`, `datetime`, `number`, `name`, `duration`, `new`, `contact_id`,`src`'
+        query = "%s INTO {} (%s) " % (str_replace, fields)
+        print(query)
+        values = "VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}');"
+        strnew = '1' if self.new else '0'
+        values = values.format(self.id, self.status, self.sqldate, self.number,
+                               self.naming, self.duration, strnew, self.contact_id, u'mm')
+        return query+values
+
+    @property
+    def sql_insert(self):
+        return self.sql_build()
+
+    @property
+    def sql_replace(self):
+        return self.sql_build(replace=True)
+
+    @property
+    def timestamp(self):
+        return self._timestamp
+
+    @property
+    def duration(self):
+        return self._duration
+
+    @property
+    def number(self):
+        return self._number
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def new(self):
+        return self._new
+
+    @new.setter
+    def new(self, value):
+        self._setnew(value)
+        self._new = value
+
+    @property
+    def status(self):
+        return self._status
+
+    @property
+    def strdate(self):
+        return datetime.fromtimestamp(
+                self._timestamp).strftime('%d-%m-%Y %H:%M:%S')
+
+    @property
+    def sqldate(self):
+        return datetime.fromtimestamp(
+                self._timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+    @property
+    def tag(self):
+        return '<' if self._status == 'outgoing'\
+               else '!' if self._status == 'missed' else '>'
+
+    @property
+    def naming(self):
+        return self._name if self._number != self._name else ''
+
+    @property
+    def strdur(self):
+        return datetime.fromtimestamp(
+                self._duration).strftime('%M:%S')
+
+    @property
+    def strnew(self):
+        return 'N' if self._new else 'O'
+
+    @property
+    def contact_id(self):
+        return self._contact_id
+
+    def __str__(self):
+        return '{}:{} {} {} {} {}'.format(self.id, self.strdate,
+                                          self.tag, self.number,
+                                          self.strdur, self.naming)
+
+
+class FbxCalls:
+    """Calls object"""
+
+    def __init__(self):
+        """Constructor"""
+        self._calls = []
+
+    def __iter__(self):
+        return iter(self._calls)
+
+    def append(self, call):
+        self._calls.append(call)
+
+    def get_by_id(self, id):
+        for call in self._calls:
+            if call.id == id:
+                return call
+        return None
+
+    @property
+    def calls(self):
+        return self._calls
+
+
 class FbxService:
     """"Service base class"""
 
