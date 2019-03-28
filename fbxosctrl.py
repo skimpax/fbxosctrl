@@ -498,6 +498,7 @@ class FbxCall:
         self._new = data.get('new')
         self._status = data.get('type')
         self._contact_id = data.get('contact_id')
+        self._freebox_address = self._ctrl._conf.freebox_address
 
     def _setnew(self, value):
 
@@ -521,7 +522,8 @@ class FbxCall:
         values = "VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}');"
         strnew = '1' if self.new else '0'
         values = values.format(self.id, self.status, self.sqldate, self.number,
-                               self.naming, self.duration, strnew, self.contact_id, u'mm')
+                               self.naming, self.duration, strnew, self.contact_id,
+                               self._freebox_address)
         return query+values
 
     @property
