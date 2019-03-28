@@ -518,7 +518,6 @@ class FbxCall:
         str_replace = u'REPLACE' if replace else u'INSERT'
         fields = u'`id`, `type`, `datetime`, `number`, `name`, `duration`, `new`, `contact_id`,`src`'
         query = "%s INTO {} (%s) " % (str_replace, fields)
-        print(query)
         values = "VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}');"
         strnew = '1' if self.new else '0'
         values = values.format(self.id, self.status, self.sqldate, self.number,
