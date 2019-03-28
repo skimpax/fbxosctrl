@@ -1088,6 +1088,126 @@ class FbxServiceDhcp(FbxService):
         return 0
 
 
+class FbxPortForwarding:
+    """Call object"""
+
+    def __init__(self, ctrl, data):
+        """Constructor"""
+        self._ctrl = ctrl
+        self._id = data.get('id')
+        self._enabled = data.get('enabled')
+        self._ip_proto = data.get('ip_proto')
+        self._wan_port_start = data.get('wan_port_start')
+        self._wan_port_end = data.get('wan_port_end')
+        self._lan_ip = data.get('lan_ip')
+        self._lan_port = data.get('lan_port')
+        self._hostname = data.get('hostname')
+        self._src_ip = data.get('src_ip')
+        self._comment = data.get('comment')
+        self._freebox_address = self._ctrl._conf.freebox_address
+
+    def __str__(self):
+
+        data = '  #{}: enabled: {}, hostname: {}, comment: {},\n'
+        data += '       lan_port: {}, wan_port_start: {}, wan_port_end: {}\n'
+        data += '       src_ip: {}, lan_ip: {}, ip_proto: {}'
+        return data.format(self.id, self.enabled, self.hostname,
+                           self.comment, self.lan_port, self.wan_port_start,
+                           self.wan_port_end, self.src_ip,
+                           self.lan_ip, self.ip_proto)
+
+    def _set_property(self, ppty, name, value):
+
+        if ppty == value:
+            return
+
+        # PUT new value
+        uri = '/fw/redir/{}'.format(self.id)
+        if name in [u'wan_port_start', u'lan_port']:
+            data = {u'wan_port_start': value, u'lan_port': value}
+        else:
+            data = {name: value}
+
+        # PUT
+        try:
+            resp = self._ctrl._http.put(uri, data=data, no_login=False)
+        except requests.exceptions.Timeout as exc:
+            raise exc
+
+        if not resp.success:
+            raise FbxException('Request failure: {}'.format(resp))
+
+        ppty = value
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def enabled(self):
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value):
+        self._set_property(self._enabled, u'enabled', value)
+
+    @property
+    def ip_proto(self):
+        return self._ip_proto
+
+    @property
+    def wan_port_start(self):
+        return self._wan_port_start
+
+    @wan_port_start.setter
+    def wan_port_start(self, value):
+        self._set_property(self._wan_port_start, u'wan_port_start', value)
+
+    @property
+    def wan_port_end(self):
+        return self._wan_port_end
+
+    @wan_port_end.setter
+    def wan_port_end(self, value):
+        self._set_property(self._wan_port_end, u'wan_port_end', value)
+
+    @property
+    def lan_ip(self):
+        return self._lan_ip
+
+    @lan_ip.setter
+    def lan_ip(self, value):
+        self._set_property(self._lan_ip, u'lan_ip', value)
+
+    @property
+    def lan_port(self):
+        return self._lan_port
+
+    @lan_port.setter
+    def lan_port(self, value):
+        self._set_property(self._lan_port, u'lan_port', value)
+
+    @property
+    def hostname(self):
+        return self._hostname
+
+    @property
+    def src_ip(self):
+        return self._src_ip
+
+    @src_ip.setter
+    def src_ip(self, value):
+        self._set_property(self._src_ip, u'src_ip', value)
+
+    @property
+    def comment(self):
+        return self._comment
+
+    @comment.setter
+    def comment(self, value):
+        self._set_property(self._comment, u'comment', value)
+
+
 class FbxServicePortForwarding(FbxService):
     """Port Forwarding"""
 
