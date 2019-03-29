@@ -672,9 +672,10 @@ class FbxCall:
         return self._contact_id
 
     def __str__(self):
-        return '{}:{} {} {} {} {}'.format(self.id, self.strdate,
-                                          self.tag, self.number,
-                                          self.strdur, self.naming)
+        return '{}:{} {} {} {} {} {}'.format(self.id, self.strdate,
+                                             self.strnew,
+                                             self.tag, self.number,
+                                             self.strdur, self.naming)
 
 
 class FbxCalls:
@@ -1375,6 +1376,33 @@ class FbxServiceCall(FbxService):
 
     def _get_calls_list(self, new_only):
         """ List all the calls """
+        if self._conf.resp_archive:
+            """ List calls from archive"""
+            fields = (u'id', u'type', u'datetime', u'number', u'name', u'duration',
+                      u'new', u'contact_id', u'src')
+            query = u'SELECT `%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s` FROM `calls`;'
+            query = query % fields
+            log('>>> Query: {}'.format(query))
+            conn = sqlite3.connect(self._conf._db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            rows = c.execute(query)
+            for row in rows:
+                if new_only and row['new'] == 0:
+                    continue
+                data = {}
+                for field in fields:
+                    if field == u'type':
+                        data[u'status'] = row[field]
+                    elif field == u'datetime':
+                        data[field] = datetime.strptime(row[field],u'%Y-%m-%d %H:%M:%S')
+                        data[field] = (data[field] - datetime(1970, 1, 1)).total_seconds()
+                    else:
+                        data[field] = row[field]
+                ocall = FbxCall(self, data)
+                print(ocall)
+            return
+            
         uri = '/call/log/'
         resp = self._http.get(uri)
 
@@ -1388,27 +1416,24 @@ class FbxServiceCall(FbxService):
         count = 0
         calls = resp.result
         for call in calls:
+        
+            ocall = FbxCall(self, call)
+            query = ocall.sql_replace.format(u'`calls`')
+            log('query: {}'.format(query))
+            conn = sqlite3.connect(self._conf._db_file)
+            c = conn.cursor()
+            c.execute(query)
+            conn.commit()
+            c.close()
+            conn.close()
+        
             # for new call only, we display new calls only
             if new_only and call.get('new') is False:
                 continue
 
             count += 1
             # call to be displayed
-            timestamp = call.get('datetime')
-            duration = call.get('duration')
-            number = call.get('number')
-            name = call.get('name')
-
-            strdate = datetime.fromtimestamp(
-                timestamp).strftime('%d-%m-%Y %H:%M:%S')
-            strdur = datetime.fromtimestamp(
-                duration).strftime('%M:%S')
-
-            status = call.get('type')
-            tag = '<' if status == 'outgoing'else '!' if status == 'missed' else '>'
-            naming = ' ({})'.format(name) if number != name else ''
-            dur = ' - {}'.format(strdur) if status != "missed" and duration else ''
-            print('{} {} {}{}{}'.format(strdate, tag, number, naming, dur))
+            print(u'{}# {}'.format(count, ocall))
 
         return count > 0
 
