@@ -73,12 +73,15 @@ CREATE TABLE `calls` (
   `UpdatedInDB` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE `static_leases` (
-  `id` varchar(17) PRIMARY KEY,
-  `mac` varchar(17) NOT NULL,
+  `mac` varchar(17) PRIMARY KEY,
+  `hostname` varchar(40) NOT NULL DEFAULT '',
   `ip` varchar(27) NOT NULL ,
+  `lease_remaining` int(11) NOT NULL DEFAULT 0,
+  `assign_time` datetime DEFAULT NULL DEFAULT 0,
+  `refresh_time` datetime DEFAULT NULL DEFAULT 0,
   `is_static` tinyint(1) NOT NULL DEFAULT 1,
-  `assigned` datetime DEFAULT NULL,
-  `comment` varchar(40) NOT NULL,
+  `comment` varchar(40) NOT NULL  DEFAULT '',
+  `src` varchar(40) NOT NULL,
   `UpdatedInDb` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
@@ -1102,6 +1105,85 @@ class FbxServiceWifi(FbxService):
         return is_on
 
 
+class FbxDhcpLease:
+    """Lease object"""
+
+    def __init__(self, ctrl, data):
+        """Constructor"""
+        self._ctrl = ctrl
+        self._mac = data.get('mac')
+        if 'hostname' in data:
+            self._hostname = data.get('hostname')
+        elif 'host' in data:
+            self._hostname = data.get('host').get('name')
+        else:
+            self._hostname = u''
+        self._ip = data.get('ip')
+        self._is_static = data.get('is_static')
+        self._assign_time = data.get('assign_time')
+        self._comment = data.get('comment')
+        self._freebox_address = self._ctrl._conf.freebox_address
+
+    @property
+    def mac(self):
+        return self._mac
+
+    @property
+    def hostname(self):
+        return self._hostname
+
+    @property
+    def ip(self):
+        return self._ip
+
+    @property
+    def is_static(self):
+        return self._is_static
+
+    @property
+    def assign_time(self):
+        return self._assign_time
+
+    @property
+    def strassign(self):
+        return datetime.fromtimestamp(
+                self._assign_time).strftime('%d-%m-%Y %H:%M:%S')
+
+    @property
+    def sqlassign(self):
+        return datetime.fromtimestamp(
+                self._assign_time).strftime('%Y-%m-%d %H:%M:%S')
+
+    @property
+    def comment(self):
+        return self._comment
+
+    def __str__(self):
+        data = 'mac: {}, ip: {}, assigned: {}, static: {}'
+        data += ', hostname: {}'
+        data = data.format(self.mac, self.ip, self.strassign, self.is_static, self.hostname)
+        return data
+
+    def sql_build(self, replace=False):
+        str_replace = u'REPLACE' if replace else u'INSERT'
+        tfields = [u'`mac`', u'`ip`', u'`hostname`',
+                   u'`is_static`', u'`assign_time`', u'`comment`', u'`src`']
+        fields = u','.join(tfields)
+        query = "%s INTO {} (%s) " % (str_replace, fields)
+        values = "VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}');"
+        values = values.format(self.mac, self.ip, self.hostname, self.is_static, 
+                               self.sqlassign, u'', self._freebox_address)
+        return query+values
+
+    @property
+    def sql_insert(self):
+        return self.sql_build()
+
+    @property
+    def sql_replace(self):
+        return self.sql_build(replace=True)
+
+
 class FbxServiceDhcp(FbxService):
     """DHCP domain"""
 
@@ -1131,32 +1213,39 @@ class FbxServiceDhcp(FbxService):
             print('No DHCP leases')
             return 0
 
-        def display_lease_entry(count, lease):
-            print(
-                '  #{}: mac: {}, ip: {}, hostname: {}, static: {}'
-                .format(
-                    count, lease.get('mac'), lease.get('ip'),
-                    lease.get('hostname'), lease.get('is_static')))
-
         count = 1
         print('List of reachable leases:')
         for lease in leases:
+            olease = FbxDhcpLease(self,lease)
+            query = olease.sql_replace.format(u'static_leases')
+            print('query: {}'.format(query))
+            conn = sqlite3.connect(self._conf._db_file)
+            c = conn.cursor()
+            c.execute(query)
+            conn.commit()
+            c.close()
+            conn.close()
+                
+        for lease in leases:
             if 'host' in lease and lease.get('host').get('reachable'):
-                display_lease_entry(count, lease)
+                olease = FbxDhcpLease(self,lease)
+                print(u'  #{}: {}'.format(count, olease))
                 count += 1
 
         count = 1
         print('List of unreachable leases:')
         for lease in leases:
             if 'host' in lease and not lease.get('host').get('reachable'):
-                display_lease_entry(count, lease)
+                olease = FbxDhcpLease(self,lease)
+                print(u'  #{}: {}'.format(count, olease))
                 count += 1
 
         count = 1
         print('List of other leases:')
         for lease in leases:
             if 'host' not in lease:
-                display_lease_entry(count, lease)
+                olease = FbxDhcpLease(self,lease)
+                print(u'  #{}: {}'.format(count, olease))
                 count += 1
         return 0
 
