@@ -1395,14 +1395,14 @@ class FbxServiceCall(FbxService):
                     if field == u'type':
                         data[u'status'] = row[field]
                     elif field == u'datetime':
-                        data[field] = datetime.strptime(row[field],u'%Y-%m-%d %H:%M:%S')
+                        data[field] = datetime.strptime(row[field], u'%Y-%m-%d %H:%M:%S')
                         data[field] = (data[field] - datetime(1970, 1, 1)).total_seconds()
                     else:
                         data[field] = row[field]
                 ocall = FbxCall(self, data)
                 print(ocall)
             return
-            
+
         uri = '/call/log/'
         resp = self._http.get(uri)
 
@@ -1416,7 +1416,7 @@ class FbxServiceCall(FbxService):
         count = 0
         calls = resp.result
         for call in calls:
-        
+
             ocall = FbxCall(self, call)
             query = ocall.sql_replace.format(u'`calls`')
             log('query: {}'.format(query))
@@ -1426,7 +1426,7 @@ class FbxServiceCall(FbxService):
             conn.commit()
             c.close()
             conn.close()
-        
+
             # for new call only, we display new calls only
             if new_only and call.get('new') is False:
                 continue
