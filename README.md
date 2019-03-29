@@ -77,6 +77,8 @@ optional arguments:
   -j            simply print Freebox Server reponse in JSON format
   -c CONF_PATH  path where to store/retrieve this app configuration files
                 (default: local directory)
+  --save        save to db file (clist, dhcpleases, pfwd only)
+  --archive     read from db file (clist, dhcpleases, pfwd only)
   --regapp      register this app to FreeboxOS and save result in
                 configuration file (to be executed only once)
   --wrstatus    get FreeboxOS current Wifi Radio status

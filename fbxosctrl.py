@@ -122,6 +122,7 @@ class FbxConfiguration:
         self._reg_params = None
         self._resp_as_json = False
         self._resp_archive = False
+        self._resp_save = False
         self._conf_path = '.'
         self._db_file = 'fbxosctrl.db'
 
@@ -177,6 +178,14 @@ class FbxConfiguration:
     @resp_archive.setter
     def resp_archive(self, resp_archive):
         self._resp_archive = resp_archive
+
+    @property
+    def resp_save(self):
+        return self._resp_save
+
+    @resp_save.setter
+    def resp_save(self, resp_save):
+        self._resp_save = resp_save
 
     @property
     def conf_path(self):
@@ -1121,6 +1130,8 @@ class FbxDhcpLease:
         self._ip = data.get('ip')
         self._is_static = data.get('is_static')
         self._assign_time = data.get('assign_time')
+        self._refresh_time = data.get('refresh_time')
+        self._lease_remaining = data.get('lease_remaining')
         self._comment = data.get('comment')
         self._freebox_address = self._ctrl._conf.freebox_address
 
@@ -1155,24 +1166,51 @@ class FbxDhcpLease:
                 self._assign_time).strftime('%Y-%m-%d %H:%M:%S')
 
     @property
+    def refresh_time(self):
+        return self._refresh_time
+
+    @property
+    def strrefresh_time(self):
+        return datetime.fromtimestamp(
+                self._refresh_time).strftime('%d-%m-%Y %H:%M:%S')
+
+    @property
+    def sqlrefresh_time(self):
+        return datetime.fromtimestamp(
+                self._refresh_time).strftime('%Y-%m-%d %H:%M:%S')
+
+    @property
+    def lease_remaining(self):
+        return self._lease_remaining
+
+    @property
+    def strremaining(self):
+        return datetime.fromtimestamp(
+                self._lease_remaining).strftime('%M:%S')
+
+    @property
     def comment(self):
         return self._comment
 
     def __str__(self):
-        data = 'mac: {}, ip: {}, assigned: {}, static: {}'
+        data = 'mac: {}, ip: {}, assigned: {}, refresh: {}\n       remaining: {}, static: {}'
         data += ', hostname: {}'
-        data = data.format(self.mac, self.ip, self.strassign, self.is_static, self.hostname)
+        data = data.format(self.mac, self.ip, self.strassign,
+                           self.strrefresh_time, self.strremaining, self.is_static, self.hostname)
         return data
 
     def sql_build(self, replace=False):
         str_replace = u'REPLACE' if replace else u'INSERT'
         tfields = [u'`mac`', u'`ip`', u'`hostname`',
-                   u'`is_static`', u'`assign_time`', u'`comment`', u'`src`']
+                   u'`is_static`', u'`assign_time`',
+                   u'`refresh_time`', u'`lease_remaining`',
+                   u'`comment`', u'`src`']
         fields = u','.join(tfields)
         query = "%s INTO {} (%s) " % (str_replace, fields)
-        values = "VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}');"
-        values = values.format(self.mac, self.ip, self.hostname, self.is_static, 
-                               self.sqlassign, u'', self._freebox_address)
+        values = "VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}');"
+        values = values.format(self.mac, self.ip, self.hostname, self.is_static,
+                               self.sqlassign, self.sqlrefresh_time,
+                               self.lease_remaining, u'', self._freebox_address)
         return query+values
 
     @property
@@ -1195,6 +1233,35 @@ class FbxServiceDhcp(FbxService):
 
     def get_dhcp_leases(self):
         """ List the DHCP leases on going"""
+        if self._conf.resp_archive:
+            print('Save to file: {}'.format(self._conf._db_file))
+            fields = (u'mac', u'ip', u'hostname',
+                      u'is_static', u'assign_time',
+                      u'refresh_time', u'lease_remaining',
+                      u'comment', u'src')
+            query = u'SELECT `%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s` FROM `static_leases`;'
+            query = query % fields
+            log('>>> Query: {}'.format(query))
+            conn = sqlite3.connect(self._conf._db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            rows = c.execute(query)
+            count = 1
+            for row in rows:
+                data = {}
+                for field in fields:
+                    if field in [u'assign_time', u'refresh_time']:
+                        data[field] = datetime.strptime(row[field], u'%Y-%m-%d %H:%M:%S')
+                        data[field] = (data[field] - datetime(1970, 1, 1)).total_seconds()
+                    else:
+                        data[field] = row[field]
+                odhcplease = FbxDhcpLease(self, data)
+                print(u'  #{}: {}'.format(count, odhcplease))
+                count += 1
+            count -= 1
+
+            return
+
         log(">>> get_dhcp_leases")
         # GET wifi status
         uri = '/dhcp/dynamic_lease/'
@@ -1215,20 +1282,29 @@ class FbxServiceDhcp(FbxService):
 
         count = 1
         print('List of reachable leases:')
+        if self._conf.resp_save:
+            print('Save to file: {}'.format(self._conf._db_file))
         for lease in leases:
-            olease = FbxDhcpLease(self,lease)
-            query = olease.sql_replace.format(u'static_leases')
-            print('query: {}'.format(query))
-            conn = sqlite3.connect(self._conf._db_file)
-            c = conn.cursor()
-            c.execute(query)
-            conn.commit()
-            c.close()
-            conn.close()
-                
+            if self._conf.resp_save:
+                olease = FbxDhcpLease(self, lease)
+                query = olease.sql_replace.format(u'static_leases')
+                log('query: {}'.format(query))
+                conn = sqlite3.connect(self._conf._db_file)
+                c = conn.cursor()
+                c.execute(query)
+                conn.commit()
+                c.close()
+                conn.close()
+                count += 1
+        if self._conf.resp_save:
+            count += -1
+            print('Save {} records to file: {}'.format(count, self._conf._db_file))
+
+        count = 1
+
         for lease in leases:
             if 'host' in lease and lease.get('host').get('reachable'):
-                olease = FbxDhcpLease(self,lease)
+                olease = FbxDhcpLease(self, lease)
                 print(u'  #{}: {}'.format(count, olease))
                 count += 1
 
@@ -1236,7 +1312,7 @@ class FbxServiceDhcp(FbxService):
         print('List of unreachable leases:')
         for lease in leases:
             if 'host' in lease and not lease.get('host').get('reachable'):
-                olease = FbxDhcpLease(self,lease)
+                olease = FbxDhcpLease(self, lease)
                 print(u'  #{}: {}'.format(count, olease))
                 count += 1
 
@@ -1244,7 +1320,7 @@ class FbxServiceDhcp(FbxService):
         print('List of other leases:')
         for lease in leases:
             if 'host' not in lease:
-                olease = FbxDhcpLease(self,lease)
+                olease = FbxDhcpLease(self, lease)
                 print(u'  #{}: {}'.format(count, olease))
                 count += 1
         return 0
@@ -1407,12 +1483,14 @@ class FbxServicePortForwarding(FbxService):
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             rows = c.execute(query)
+            count = 1
             for row in rows:
                 data = {}
                 for field in fields:
                     data[field] = row[field]
                 opforwarding = FbxPortForwarding(self, data)
                 print(opforwarding)
+                count += 1
             return
         uri = '/fw/redir/'
         resp = self._http.get(uri)
@@ -1435,18 +1513,25 @@ class FbxServicePortForwarding(FbxService):
 
         count = 1
         print('>>> List of reachable leases:')
+        if self._conf.resp_save:
+            print('Save to file: {}'.format(self._conf._db_file))
         for pforwarding in pforwardings:
             opforwarding = FbxPortForwarding(self, pforwarding)
-            query = opforwarding.sql_replace.format(u'`fwredir`')
-            log('query: {}'.format(query))
-            conn = sqlite3.connect(self._conf._db_file)
-            c = conn.cursor()
-            c.execute(query)
-            conn.commit()
-            c.close()
-            conn.close()
+            if self._conf.resp_save:
+                query = opforwarding.sql_replace.format(u'`fwredir`')
+                log('query: {}'.format(query))
+                conn = sqlite3.connect(self._conf._db_file)
+                c = conn.cursor()
+                c.execute(query)
+                conn.commit()
+                c.close()
+                conn.close()
             display_port_forwarding_entry(count, opforwarding)
             count += 1
+        if self._conf.resp_save:
+            count += -1
+            print('Save {} records to file: {}'.format(count, self._conf._db_file))
+
         return 0
 
 
@@ -1504,17 +1589,22 @@ class FbxServiceCall(FbxService):
 
         count = 0
         calls = resp.result
+
+        if self._conf.resp_save:
+            print('Save to file: {}'.format(self._conf._db_file))
+
         for call in calls:
 
             ocall = FbxCall(self, call)
-            query = ocall.sql_replace.format(u'`calls`')
-            log('query: {}'.format(query))
-            conn = sqlite3.connect(self._conf._db_file)
-            c = conn.cursor()
-            c.execute(query)
-            conn.commit()
-            c.close()
-            conn.close()
+            if self._conf.resp_save:
+                query = ocall.sql_replace.format(u'`calls`')
+                log('query: {}'.format(query))
+                conn = sqlite3.connect(self._conf._db_file)
+                c = conn.cursor()
+                c.execute(query)
+                conn.commit()
+                c.close()
+                conn.close()
 
             # for new call only, we display new calls only
             if new_only and call.get('new') is False:
@@ -1523,6 +1613,9 @@ class FbxServiceCall(FbxService):
             count += 1
             # call to be displayed
             print(u'{}# {}'.format(count, ocall))
+
+        if self._conf.resp_save:
+            print('Save {} records to file: {}'.format(count, self._conf._db_file))
 
         return count > 0
 
@@ -1675,9 +1768,13 @@ class FreeboxOSCli:
             action='store_true',
             help='verbose mode')
         self._parser.add_argument(
-            '-a',
+            '--archive',
             action='store_true',
-            help='archive')
+            help='read archive')
+        self._parser.add_argument(
+            '--save',
+            action='store_true',
+            help='store in archive')
         self._parser.add_argument(
             '-j',
             action='store_true',
@@ -1825,10 +1922,15 @@ class FreeboxOSCli:
             self._ctrl.conf.resp_as_json = True
         del argsdict['j']
 
-        # Activate json output if requested
-        if argsdict.get('a'):
+        # Activate read from archive
+        if argsdict.get('archive'):
             self._ctrl.conf.resp_archive = True
-        del argsdict['a']
+        del argsdict['archive']
+
+        # Activate write to archive
+        if argsdict.get('save'):
+            self._ctrl.conf.resp_save = True
+        del argsdict['save']
 
         # Set configuration path (local directory by default)
         conf_path = argsdict.get('conf_path')[0]
