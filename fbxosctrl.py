@@ -13,6 +13,7 @@ import requests
 import hmac
 from zeroconf import Zeroconf
 from datetime import datetime, timedelta
+import sqlite3
 
 
 FBXOSCTRL_VERSION = "2.4.3"
@@ -42,6 +43,45 @@ g_app_desc = {
 
 
 g_log_enabled = False
+
+sql_create_tables = \
+"""
+CREATE TABLE `fwredir` (
+  `id` int(11) PRIMARY KEY,
+  `src_ip` varchar(15) NOT NULL,
+  `ip_proto` varchar(10) NOT NULL,
+  `wan_port_start` int(11) NOT NULL,
+  `wan_port_end` int(11) NOT NULL,
+  `lan_port` int(11) NOT NULL,
+  `lan_ip` varchar(15) NOT NULL,
+  `hostname` varchar(40) NOT NULL,
+  `enabled` varchar(5) NOT NULL,
+  `comment` varchar(80) NOT NULL,
+  `src` varchar(40) NOT NULL,
+  `UpdatedInDb` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE `calls` (
+  `id` int(11) PRIMARY KEY,
+  `type` varchar(11) NOT NULL,
+  `datetime` datetime NOT NULL,
+  `number` varchar(40) NOT NULL,
+  `name` varchar(80) NOT NULL,
+  `duration` int(11) NOT NULL,
+  `new` tinyint(1) NOT NULL,
+  `contact_id` int(11) NOT NULL,
+  `src` varchar(40) NOT NULL,
+  `UpdatedInDB` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE `static_leases` (
+  `id` varchar(17) PRIMARY KEY,
+  `mac` varchar(17) NOT NULL,
+  `ip` varchar(27) NOT NULL ,
+  `is_static` tinyint(1) NOT NULL DEFAULT 1,
+  `assigned` datetime DEFAULT NULL,
+  `comment` varchar(40) NOT NULL,
+  `UpdatedInDb` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+"""
 
 
 def log(what):
@@ -78,7 +118,9 @@ class FbxConfiguration:
         self._addr_params = None
         self._reg_params = None
         self._resp_as_json = False
+        self._resp_archive = False
         self._conf_path = '.'
+        self._db_file = 'fbxosctrl.db'
 
     @property
     def freebox_address(self):
@@ -101,6 +143,14 @@ class FbxConfiguration:
         self._reg_file = reg_file
 
     @property
+    def db_file(self):
+        return self._db_file
+
+    @db_file.setter
+    def db_file(self, db_file):
+        self._db_file = db_file
+
+    @property
     def reg_params(self):
         return self._reg_params
 
@@ -118,6 +168,14 @@ class FbxConfiguration:
         self._resp_as_json = resp_as_json
 
     @property
+    def resp_archive(self):
+        return self._resp_archive
+
+    @resp_archive.setter
+    def resp_archive(self, resp_archive):
+        self._resp_archive = resp_archive
+
+    @property
     def conf_path(self):
         return self._conf_path
 
@@ -129,6 +187,7 @@ class FbxConfiguration:
         self._conf_path = conf_path
         self._addr_file = self._conf_path + '/' + self._addr_file
         self._reg_file = self._conf_path + '/' + self._reg_file
+        self._db_file = self._conf_path + '/' + self._db_file
 
     def load(self, want_regapp):
         """Load configuration params"""
@@ -149,6 +208,7 @@ class FbxConfiguration:
             if not self.resp_as_json:
                 # print only if not in JSON format
                 print('Freebox Server is accessible via: {}'.format(url))
+            self._create_db_file()
 
     def has_registration_params(self):
         """ Indicate whether registration params look initialized """
@@ -224,6 +284,18 @@ class FbxConfiguration:
         if os.path.exists(self._reg_file):
             with open(self._reg_file) as infile:
                 self._reg_params = json.load(infile)
+
+    def _create_db_file(self):
+        if os.path.exists(self._db_file):
+            return
+        else:
+            log('>>> create_db_file: {}'.format(self._db_file))
+            conn = sqlite3.connect(self._db_file)
+            c = conn.cursor()
+            c.executescript(sql_create_tables)
+            conn.commit()
+            c.close()
+            conn.close()
 
 
 class FbxResponse:
@@ -1116,6 +1188,28 @@ class FbxPortForwarding:
                            self.wan_port_end, self.src_ip,
                            self.lan_ip, self.ip_proto)
 
+    def sql_build(self, replace=False):
+        str_replace = u'REPLACE' if replace else u'INSERT'
+        tfields = [u'`id`', u'`src_ip`', u'`ip_proto`',
+                   u'`wan_port_start`', u'`wan_port_end`', u'`lan_port`', u'`lan_ip`',
+                   u'`hostname`', u'`enabled`', u'`comment`', u'`src`']
+        fields = u','.join(tfields)
+        query = "%s INTO {} (%s) " % (str_replace, fields)
+        values = "VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}');"
+        strenabled = '1' if self.enabled else '0'
+        values = values.format(self.id, self.src_ip, self.ip_proto, self.wan_port_start,
+                               self.wan_port_end, self.lan_port, self.lan_ip, self.hostname,
+                               strenabled, self.comment, self._freebox_address)
+        return query+values
+
+    @property
+    def sql_insert(self):
+        return self.sql_build()
+
+    @property
+    def sql_replace(self):
+        return self.sql_build(replace=True)
+
     def _set_property(self, ppty, name, value):
 
         if ppty == value:
@@ -1211,8 +1305,25 @@ class FbxPortForwarding:
 class FbxServicePortForwarding(FbxService):
     """Port Forwarding"""
 
-    def get_port_forwardings(self):
+    def get_port_forwardings(self, archive=False):
         """ List the port forwarding on going"""
+        if self._conf.resp_archive:
+            fields = (u'id', u'src_ip', u'ip_proto', u'wan_port_start',
+                      u'wan_port_end', u'lan_port', u'lan_ip', u'hostname', u'enabled', u'comment')
+            query = u'SELECT `%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s`,`%s` FROM `fwredir`;'
+            query = query % fields
+            log('>>> Query: {}'.format(query))
+            conn = sqlite3.connect(self._conf._db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            rows = c.execute(query)
+            for row in rows:
+                data = {}
+                for field in fields:
+                    data[field] = row[field]
+                opforwarding = FbxPortForwarding(self, data)
+                print(opforwarding)
+            return
         uri = '/fw/redir/'
         resp = self._http.get(uri)
 
@@ -1229,20 +1340,22 @@ class FbxServicePortForwarding(FbxService):
             print('No port forwarding')
             return 0
 
-        def display_port_forwarding_entry(count, pforwarding):
-            data = '  #{}: id: {}, enabled: {}, hostname: {}, comment: {},\n'
-            data += '       lan_port: {}, wan_port_start: {}, wan_port_end: {}\n'
-            data += '       src_ip: {}, lan_ip: {}, ip_proto: {}'
-            print(data.format(
-                    count, pforwarding.get('id'), pforwarding.get('enabled'),
-                    pforwarding.get('hostname'), pforwarding.get('comment'), pforwarding.get('lan_port'),
-                    pforwarding.get('wan_port_start'), pforwarding.get('wan_port_end'),
-                    pforwarding.get('src_ip'), pforwarding.get('lan_ip'), pforwarding.get('ip_proto')))
+        def display_port_forwarding_entry(count, opforwarding):
+            print(opforwarding)
 
         count = 1
-        print('List of reachable leases:')
+        print('>>> List of reachable leases:')
         for pforwarding in pforwardings:
-            display_port_forwarding_entry(count, pforwarding)
+            opforwarding = FbxPortForwarding(self, pforwarding)
+            query = opforwarding.sql_replace.format(u'`fwredir`')
+            log('query: {}'.format(query))
+            conn = sqlite3.connect(self._conf._db_file)
+            c = conn.cursor()
+            c.execute(query)
+            conn.commit()
+            c.close()
+            conn.close()
+            display_port_forwarding_entry(count, opforwarding)
             count += 1
         return 0
 
@@ -1448,6 +1561,10 @@ class FreeboxOSCli:
             action='store_true',
             help='verbose mode')
         self._parser.add_argument(
+            '-a',
+            action='store_true',
+            help='archive')
+        self._parser.add_argument(
             '-j',
             action='store_true',
             help='simply print Freebox Server reponse in JSON format')
@@ -1593,6 +1710,11 @@ class FreeboxOSCli:
         if argsdict.get('j'):
             self._ctrl.conf.resp_as_json = True
         del argsdict['j']
+
+        # Activate json output if requested
+        if argsdict.get('a'):
+            self._ctrl.conf.resp_archive = True
+        del argsdict['a']
 
         # Set configuration path (local directory by default)
         conf_path = argsdict.get('conf_path')[0]
