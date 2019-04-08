@@ -65,8 +65,8 @@ JSON format:
 ### Usage
 
 ```bash
-usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH]
-                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --pfwd | --clist | --cnew | --cread | --reboot | --sinfo | --einfo | --linfo | --dlist | --dspace | --tlist)
+usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH] [--save] [--archive]
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --dhcpstleases | --pfwd | --clist | --cnew | --cread | --reboot | --sinfo | --einfo | --linfo | --dlist | --dspace | --tlist)
 
 Command line utility to control some FreeboxOS services.
 
@@ -88,8 +88,13 @@ optional arguments:
   --wpon        turn FreeboxOS Wifi Planning ON
   --wpoff       turn FreeboxOS Wifi Planning OFF
   --dhcpleases  display the current DHCP leases info
+                options [--save, --archive]
+  --dhcpstleases  display the current DHCP static leases info
+                options [--save, --archive, --restore]
   --pfwd        display the list of port forwardings info
+                options [--save, --archive, --restore]
   --clist       display the list of received calls
+                options [--save, --archive]
   --cnew        display the list of new received calls
   --cread       set read status for all received calls
   --reboot      reboot the Freebox Server now!
