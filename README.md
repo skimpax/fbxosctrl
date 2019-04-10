@@ -65,8 +65,8 @@ JSON format:
 ### Usage
 
 ```bash
-usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH]
-                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --clist | --cnew | --cread | --reboot | --sinfo | --dlist | --dspace | --tlist)
+usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH] [--save] [--archive]
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --dhcpstleases | --pfwd | --clist | --cnew | --cread | --reboot | --sinfo | --einfo | --linfo | --dlist | --dspace | --tlist)
 
 Command line utility to control some FreeboxOS services.
 
@@ -77,6 +77,8 @@ optional arguments:
   -j            simply print Freebox Server reponse in JSON format
   -c CONF_PATH  path where to store/retrieve this app configuration files
                 (default: local directory)
+  --save        save to db file (clist, dhcpleases, pfwd only)
+  --archive     read from db file (clist, dhcpleases, pfwd only)
   --regapp      register this app to FreeboxOS and save result in
                 configuration file (to be executed only once)
   --wrstatus    get FreeboxOS current Wifi Radio status
@@ -86,13 +88,19 @@ optional arguments:
   --wpon        turn FreeboxOS Wifi Planning ON
   --wpoff       turn FreeboxOS Wifi Planning OFF
   --dhcpleases  display the current DHCP leases info
+                options [--save, --archive]
+  --dhcpstleases  display the current DHCP static leases info
+                options [--save, --archive, --restore]
+  --pfwd        display the list of port forwardings info
+                options [--save, --archive, --restore]
   --clist       display the list of received calls
+                options [--save, --archive]
   --cnew        display the list of new received calls
   --cread       set read status for all received calls
   --reboot      reboot the Freebox Server now!
   --sinfo       display the system information
   --einfo       display the line ethernet information
-  --linfo       display the line media (xDSL/Fiber) information
+  --linfo       display the line media (ADSL/Fiber) information
   --dlist       display connected drives
   --dspace      display spaces (total/used/free) on connected drives
   --tlist       display downloads list
