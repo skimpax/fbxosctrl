@@ -826,6 +826,7 @@ class FbxDhcpDynamicLease(FbxObj):
         self._cols_def = table_defs[self.table_name][u'cols_def']
         self._table = FbxDbTable(self._table_name, u'id', self._cols_def)
         self._comment = u''
+        self._reachable = False
         self._init_from_data()
         if self._ctrl is not None:
             self._freebox_address = self._ctrl._conf.freebox_address
