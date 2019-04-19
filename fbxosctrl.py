@@ -542,7 +542,7 @@ class FbxServiceDhcp(FbxService):
         if self._conf.resp_archive:
             self._dyn_leases = FbxDhcpDynamicLeases(self._ctrl, empty=True)
             t_dyn_leases = FbxDbTable(u'dynamic_lease', u'mac', table_defs[u'dynamic_lease'][u'cols_def'])
-            self._dyn_leases.load_from_db(ctrl, FbxDhcpDynamicLease, t_dyn_leases)
+            self._dyn_leases.load_from_db(self._ctrl, FbxDhcpDynamicLease, t_dyn_leases)
         else:
             self._dyn_leases = FbxDhcpDynamicLeasesX(self._ctrl, self._st_leases)
 
@@ -806,7 +806,7 @@ class FbxServiceCall(FbxService):
         if self._conf.resp_archive:
             self._calls = FbxCalls(self._ctrl, empty=True)
             t_calls = FbxDbTable(u'call_log', u'id', table_defs[u'call_log'][u'cols_def'])
-            self._calls.load_from_db(ctrl, FbxCall, t_calls)
+            self._calls.load_from_db(self._ctrl, FbxCall, t_calls)
         else:
             self._calls = FbxCalls(self._ctrl)
 
