@@ -7,6 +7,7 @@ import json
 import requests
 import hmac
 from zeroconf import Zeroconf
+from time import sleep
 
 FBXOSCTRL_VERSION = "2.4.3"
 
@@ -284,28 +285,24 @@ class FbxConfiguration:
                 self._reg_params = json.load(infile)
 
     def _create_db_file(self):
-        if os.path.exists(self._db_file):
-            return
-        else:
-            log('>>> create_db_file: {}'.format(self._db_file))
-            try:
-                from fbxostools.fbxosdb import FbxDbTable
-                from fbxostools.fbxosobj import table_defs
-            except ImportError:
-                from fbxosdb import FbxDbTable
-                from fbxosobj import table_defs
+        # if os.path.exists(self._db_file):
+            # return
+        # else:
+        log('>>> create_db_file: {}'.format(self._db_file))
+        try:
+            from fbxostools.fbxosdb import FbxDbTable
+            from fbxostools.fbxosobj import table_defs
+        except ImportError:
+            from fbxosdb import FbxDbTable
+            from fbxosobj import table_defs
 
-            # Add tables
+        # Add tables
 
-            t_calls = FbxDbTable(u'call_log', u'id', table_defs[u'call_log'][u'cols_def'])
-            t_static_leases = FbxDbTable(u'static_lease', u'id', table_defs[u'static_lease'][u'cols_def'])
-            t_dynamic_leases = FbxDbTable(u'dynamic_lease', u'mac', table_defs[u'dynamic_lease'][u'cols_def'])
-            t_fw_redir = FbxDbTable(u'fw_redir', u'id', table_defs[u'fw_redir'][u'cols_def'])
-            self._db.add_table(t_calls)
-            self._db.add_table(t_static_leases)
-            self._db.add_table(t_dynamic_leases)
-            self._db.add_table(t_fw_redir)
-            self._db.init_base()
+        for tbl in table_defs.keys():
+            t_tbl = FbxDbTable(tbl, u'id', table_defs[tbl][u'cols_def'])
+            self._db.add_table(t_tbl)
+
+        self._db.init_base()
 
 
 class FbxResponse:
@@ -387,9 +384,8 @@ class FbxHttp():
             h['X-Fbx-App-Auth'] = self._session_token
         return h
 
-    def get(self, uri, timeout=None, no_login=False):
+    def get_do(self, uri, timeout=None, no_login=False):
         """GET request"""
-        log(">>> get")
         if not no_login:
             self._login()
 
@@ -402,6 +398,30 @@ class FbxHttp():
             headers=self.headers,
             timeout=timeout if timeout is not None else self._http_timeout)
         log('GET response: {}'.format(r.text))
+        return r
+
+    def get(self, uri, timeout=None, no_login=False):
+        """GET request"""
+        log(">>> get")
+        try_cpt = 0
+
+        while try_cpt < 5:
+            try_cpt += 1
+            r = self.get_do(uri, timeout=timeout, no_login=no_login)
+
+            # ensure status_code is 200, else raise exception
+            if requests.codes.ok != r.status_code:
+                if r.status_code == 403:
+                    self._logout()
+                    sleep(15)
+                    self.__init__(self._conf)
+                    self._login()
+                    print(u'self._session_token', self._session_token)
+                    print('err 403, retry')
+                    continue
+                raise FbxException('POST error - http_status: {} {}'.format(r.status_code, r.text))
+            else:
+                break
 
         # ensure status_code is 200, else raise exception
         if requests.codes.ok != r.status_code:
@@ -433,9 +453,7 @@ class FbxHttp():
 
         return FbxResponse.build(r.text)
 
-    def post(self, uri, data={}, timeout=None, no_login=False):
-        """POST request"""
-        log(">>> post")
+    def post_do(self, uri, data={}, timeout=None, no_login=False):
         if not no_login:
             self._login()
 
@@ -450,6 +468,56 @@ class FbxHttp():
             headers=self.headers,
             timeout=timeout if timeout is not None else self._http_timeout)
         log('POST response: {}'.format(r.text))
+        return r
+
+    def post(self, uri, data={}, timeout=None, no_login=False):
+        """POST request"""
+        log(">>> post")
+        try_cpt = 0
+
+        while try_cpt < 5:
+            try_cpt += 1
+            r = self.post_do(uri, data=data, timeout=timeout, no_login=no_login)
+            log('POST response: {}'.format(r.text))
+
+            if requests.codes.ok != r.status_code:
+                if r.status_code == 403:
+                    self._logout()
+                    sleep(15)
+                    self.__init__(self._conf)
+                    self._login()
+                    print(u'self._challenge', self._challenge)
+                    print(u'self._session_token', self._session_token)
+                    print('err 403, retry')
+                    continue
+                raise FbxException('POST error - http_status: {} {}'.format(r.status_code, r.text))
+            else:
+                break
+
+        # ensure status_code is 200, else raise exception
+        if requests.codes.ok != r.status_code:
+            raise FbxException('POST error - http_status: {} {}'.format(r.status_code, r.text))
+
+        return FbxResponse.build(r.text)
+
+    def delete(self, uri, data={}, timeout=None, no_login=False):
+        """POST request"""
+        log(">>> delete")
+        if not no_login:
+            self._login()
+
+        url = self._conf.api_address(uri)
+        jdata = json.dumps(data)
+        log('DELETE url: {} data: {}'.format(url, jdata))
+        print('DELETE url: {} data: {}'.format(url, jdata))
+
+        r = requests.delete(
+            url,
+            verify=self._certificates_file,
+            data=jdata,
+            headers=self.headers,
+            timeout=timeout if timeout is not None else self._http_timeout)
+        log('DELETE response: {}'.format(r.text))
 
         # ensure status_code is 200, else raise exception
         if requests.codes.ok != r.status_code:
@@ -501,10 +569,11 @@ class FbxHttp():
         log(">>> _logout")
         if self._is_logged_in:
             url = self._conf.api_address('/login/logout/')
-            resp = self._http.post(url, headers=self.headers)
+            # resp = self._http.post(url, headers=self.headers)
+            resp = self.post(url, headers=self.headers)
 
             # reset headers as no more dialogs expected
-            self._http_headers = None
+            # self._http_headers = None
 
             if not resp.success:
                 raise FbxException('Logout failure: {}'.format(resp))
@@ -626,6 +695,8 @@ class FreeboxOSCtrlBase:
 def main():
 
     from fbxosobj import FbxCalls, FbxCall
+    from fbxosobj import FbxContacts
+    from fbxosobj import FbxGroups, FbxGroup
     from fbxosobj import FbxDhcpStaticLeases, FbxDhcpStaticLease
     from fbxosobj import FbxDhcpStaticLeasesX, FbxDhcpDynamicLeasesX
     from fbxosobj import FbxDhcpDynamicLeases, FbxDhcpDynamicLease
@@ -639,145 +710,205 @@ def main():
     # ctrl.conf.db_file = u'/home/alain/scripts/dev/fbxosctrl/test.db'
     print(ctrl.conf.db_file)
 
-    # FbxCall
+    def test_FbxCall():
+        # FbxCall
+        calls = FbxCalls(ctrl)
+        print(u'\nCalls from freebox:')
+        for call in calls:
+            pass
+            print(call)
+        print(u'\nSave calls into database:')
+        calls.save_to_db()
 
-    calls = FbxCalls(ctrl)
-    print(u'\nCalls from freebox:')
-    for call in calls:
-        pass
+        calls = FbxCalls(ctrl, empty=True)
+        t_calls = FbxDbTable(u'call_log', u'id', table_defs[u'call_log'][u'cols_def'])
+        calls.load_from_db(ctrl, FbxCall, t_calls)
+        print(u'\nCalls from database:')
+        for call in calls:
+            pass
+            print(call)
+
+        print(u'\nCalls update test:')
+
+        for call in calls:
+            if call.new:
+                break
+        call.new = False
+        c_id = call.id
         print(call)
-    print(u'\nSave calls into database:')
-    calls.save_to_db()
+        call_new = calls.get_by_id(c_id)
+        print(call_new, call_new.new)
+        try:
+            assert call_new.new is False, u'Update call failed'
+        except AssertionError:
+            print(u'AssertionError: Update call failed')
+        call_new.new = True
+        call_new = calls.get_by_id(c_id)
+        print(call_new, call_new.new)
+        try:
+            assert call_new.new is True, u'Update call failed'
+        except AssertionError:
+            print(u'AssertionError: Update call failed')
 
-    calls = FbxCalls(ctrl, empty=True)
-    t_calls = FbxDbTable(u'call_log', u'id', table_defs[u'call_log'][u'cols_def'])
-    calls.load_from_db(ctrl, FbxCall, t_calls)
-    print(u'\nCalls from database:')
-    for call in calls:
-        pass
-        print(call)
+    def test_FbxDhcpStaticLease():
+        # FbxDhcpStaticLease
 
-    print(u'\nCalls update test:')
+        static_leases = FbxDhcpStaticLeases(ctrl)
+        print(u'\nStatic leases from freebox:')
+        for static_lease in static_leases:
+            pass
+            print(static_lease)
+        print(u'\nSave static leases into database:')
+        static_leases.save_to_db()
 
-    for call in calls:
-        if call.new:
-            break
-    call.new = False
-    c_id = call.id
-    print(call)
-    call_new = calls.get_by_id(c_id)
-    print(call_new, call_new.new)
-    try:
-        assert call_new.new is False, u'Update call failed'
-    except AssertionError:
-        print(u'AssertionError: Update call failed')
-    call_new.new = True
-    call_new = calls.get_by_id(c_id)
-    print(call_new, call_new.new)
-    try:
-        assert call_new.new is True, u'Update call failed'
-    except AssertionError:
-        print(u'AssertionError: Update call failed')
+        static_leases = FbxDhcpStaticLeases(ctrl, empty=True)
+        t_static_leases = FbxDbTable(u'static_lease', u'mac', table_defs[u'static_lease'][u'cols_def'])
+        static_leases.load_from_db(ctrl, FbxDhcpStaticLease, t_static_leases)
+        print(u'\nStatic leases from database:')
+        for static_lease in static_leases:
+            pass
+            print(static_lease)
 
-    # FbxDhcpStaticLease
+        # FbxDhcpStaticLease (extended)
 
-    static_leases = FbxDhcpStaticLeases(ctrl)
-    print(u'\nStatic leases from freebox:')
-    for static_lease in static_leases:
-        pass
-        print(static_lease)
-    print(u'\nSave static leases into database:')
-    static_leases.save_to_db()
+        dynamic_leases = FbxDhcpDynamicLeases(ctrl)
+        static_leasesx = FbxDhcpStaticLeasesX(ctrl, dynamic_leases)
+        print(u'\nStatic leases from freebox (extended):')
+        for static_lease in static_leasesx:
+            pass
+            print(static_lease)
 
-    static_leases = FbxDhcpStaticLeases(ctrl, empty=True)
-    t_static_leases = FbxDbTable(u'static_lease', u'mac', table_defs[u'static_lease'][u'cols_def'])
-    static_leases.load_from_db(ctrl, FbxDhcpStaticLease, t_static_leases)
-    print(u'\nStatic leases from database:')
-    for static_lease in static_leases:
-        pass
-        print(static_lease)
+    def test_FbxPortForwarding():
+        # FbxPortForwarding
 
-    # FbxPortForwarding
-
-    port_forwardings = FbxPortForwardings(ctrl)
-    print(u'\nPort forwardings from freebox:')
-    for port_forwarding in port_forwardings:
-        print(port_forwarding)
-    print(u'\nSave port forwardings into database:')
-    port_forwardings.save_to_db()
-
-    port_forwardings = FbxPortForwardings(ctrl, empty=True)
-    t_port_forwardings = FbxDbTable(u'fw_redir', u'id', table_defs[u'fw_redir'][u'cols_def'])
-    port_forwardings.load_from_db(ctrl, FbxPortForwarding, t_port_forwardings)
-    print(u'\nPort forwardings from database:')
-    for port_forwarding in port_forwardings:
-        pass
-        print(static_lease)
-
-    print(u'\nPortforwarding update test:')
-
-    #
-    # Todo : create a port forwarding for test
-    # {u"id":33,
-    # u"src_ip": "0.0.0.0",
-    # u"ip_proto": "tcp",
-    # u"wan_port_start": 993,
-    # u"wan_port_end": 1001,
-    # u"lan_port": 993,
-    # "lan_ip": "192.168.0.61",
-    # "hostname": "domoticz",
-    # "enabled": false,
-    # "comment": "Test1"
-    # }
-    #
-
-    for port_forwarding in port_forwardings:
-        if port_forwarding.comment[0:5] == u'Test1':
+        port_forwardings = FbxPortForwardings(ctrl)
+        print(u'\nPort forwardings from freebox:')
+        for port_forwarding in port_forwardings:
             print(port_forwarding)
-            break
-    print(port_forwarding)
-    comment = port_forwarding.comment
-    comment_new = comment+u'.'
-    p_id = port_forwarding.id
-    port_forwarding.comment = comment_new
-    print(port_forwarding, u'\n', port_forwarding.comment)
-    port_forwarding_new = port_forwardings.get_by_id(p_id)
-    print(port_forwarding_new, u'\n', port_forwarding_new.comment)
-    try:
-        assert port_forwarding_new.comment == comment_new, u'Update call failed'
-    except AssertionError:
-        print(u'AssertionError: Update call failed')
-    port_forwarding.comment = u'Test1'
+        print(u'\nSave port forwardings into database:')
+        port_forwardings.save_to_db()
 
-    # FbxDhcpDynamicLease
+        port_forwardings = FbxPortForwardings(ctrl, empty=True)
+        t_port_forwardings = FbxDbTable(u'fw_redir', u'id', table_defs[u'fw_redir'][u'cols_def'])
+        port_forwardings.load_from_db(ctrl, FbxPortForwarding, t_port_forwardings)
+        print(u'\nPort forwardings from database:')
+        for port_forwarding in port_forwardings:
+            pass
+            print(port_forwarding)
 
-    dynamic_leases = FbxDhcpDynamicLeases(ctrl)
-    print(u'\nDynamic leases from freebox:')
-    for dynamic_lease in dynamic_leases:
-        print(dynamic_lease)
-    print(u'\nSave dynamic leases into database:')
-    dynamic_leases.save_to_db()
+        print(u'\nPortforwarding update test:')
 
-    dynamic_leases = FbxDhcpDynamicLeases(ctrl, empty=True)
-    t_dynamic_leases = FbxDbTable(u'dynamic_lease', u'mac', table_defs[u'dynamic_lease'][u'cols_def'])
-    dynamic_leases.load_from_db(ctrl, FbxDhcpDynamicLease, t_dynamic_leases)
-    print(u'\nDynamic leases from database:')
-    for dynamic_lease in dynamic_leases:
-        pass
-        print(dynamic_lease)
+        #
+        # Todo : create a port forwarding for test
+        # {u"id":33,
+        # u"src_ip": "0.0.0.0",
+        # u"ip_proto": "tcp",
+        # u"wan_port_start": 993,
+        # u"wan_port_end": 1001,
+        # u"lan_port": 993,
+        # "lan_ip": "192.168.0.61",
+        # "hostname": "domoticz",
+        # "enabled": false,
+        # "comment": "Test1"
+        # }
+        #
 
-    print(u'\nDynamic leases from freebox (extended):')
-    dynamic_leasesx = FbxDhcpDynamicLeasesX(ctrl, static_leases)
-    for dynamic_lease in dynamic_leasesx:
-        print(dynamic_lease)
+        for port_forwarding in port_forwardings:
+            if port_forwarding.comment[0:5] == u'Test1':
+                print(port_forwarding)
+                break
+        print(port_forwarding)
+        comment = port_forwarding.comment
+        comment_new = comment+u'.'
+        p_id = port_forwarding.id
+        port_forwarding.comment = comment_new
+        print(port_forwarding, u'\n', port_forwarding.comment)
+        port_forwarding_new = port_forwardings.get_by_id(p_id)
+        print(port_forwarding_new, u'\n', port_forwarding_new.comment)
+        try:
+            assert port_forwarding_new.comment == comment_new, u'Update call failed'
+        except AssertionError:
+            print(u'AssertionError: Update call failed')
+        port_forwarding.comment = u'Test1'
 
-    # FbxDhcpStaticLease (extended)
+    def test_FbxDhcpDynamicLease():
+        # FbxDhcpDynamicLease
 
-    static_leasesx = FbxDhcpStaticLeasesX(ctrl, dynamic_leases)
-    print(u'\nStatic leases from freebox (extended):')
-    for static_lease in static_leasesx:
-        pass
-        print(static_lease)
+        dynamic_leases = FbxDhcpDynamicLeases(ctrl)
+        static_leases = FbxDhcpStaticLeases(ctrl)
+        print(u'\nDynamic leases from freebox:')
+        for dynamic_lease in dynamic_leases:
+            print(dynamic_lease)
+        print(u'\nSave dynamic leases into database:')
+        dynamic_leases.save_to_db()
+
+        dynamic_leases = FbxDhcpDynamicLeases(ctrl, empty=True)
+        t_dynamic_leases = FbxDbTable(u'dynamic_lease', u'mac', table_defs[u'dynamic_lease'][u'cols_def'])
+        dynamic_leases.load_from_db(ctrl, FbxDhcpDynamicLease, t_dynamic_leases)
+        print(u'\nDynamic leases from database:')
+        for dynamic_lease in dynamic_leases:
+            pass
+            print(dynamic_lease)
+
+        print(u'\nDynamic leases from freebox (extended):')
+        dynamic_leasesx = FbxDhcpDynamicLeasesX(ctrl, static_leases)
+        for dynamic_lease in dynamic_leasesx:
+            print(dynamic_lease)
+
+    def test_FbxGroup():
+        # FbxGroup
+
+        print(u'\nGroups from freebox:')
+        groups = FbxGroups(ctrl)
+        for group in groups:
+            pass
+            print(group)
+        print(u'\nCreate group Test:')
+        groups.group_add('Test')
+        print(u'\nDelete group Test:')
+        for group in groups:
+            if group.name == u'Test':
+                if groups.group_delete(group.id, group.name):
+                    print(u'{} deleted'.format(group))
+                else:
+                    print(u'{} not deleted'.format(group))
+        print(u'\nSave groups into database:')
+        groups.save_to_db()
+
+        groups = FbxGroups(ctrl, empty=True)
+        t_groups = FbxDbTable(u'group', u'id', table_defs[u'group'][u'cols_def'])
+        groups.load_from_db(ctrl, FbxGroup, t_groups)
+        print(u'\nGroups from database:')
+        for group in groups:
+            pass
+            print(group)
+
+    def test_FbxContact():
+        # FbxContact
+
+        print(u'\nContacts from freebox:')
+        contacts = FbxContacts(ctrl)
+        for contact in contacts:
+            print(contact)
+            if u'Hôtel' in contact.display_name:
+                to_add = True
+                for group in contact.groups:
+                    if group.group_id == 134:
+                        to_add = False
+                if to_add:
+                    contact.add_to_group(134)
+
+        print(u'groups:\n{}'.format(contacts.groups))
+
+        print(u'\nSave contacts into database:')
+        contacts.save_to_db()
+
+    test_FbxCall()
+    test_FbxDhcpStaticLease()
+    test_FbxDhcpDynamicLease()
+    test_FbxPortForwarding()
+    test_FbxGroup()
+    test_FbxContact()
 
     print(u'Seems to be ok')
 
