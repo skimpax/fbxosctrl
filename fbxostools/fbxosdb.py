@@ -250,9 +250,24 @@ class FbxDbTable:
             elif fields[k][u'c_type'] in [u'datetime']:
                 value = getattr(ofbx, fields[k][f_from], None)
                 if value is None:
-                    value = u''
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
+                elif value == '0000-01-00':
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
+                elif value == '':
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
+                elif value == 0.0:
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
                 else:
-                    value = datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    try:
+                        value = datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    except TypeError:
+                        value = value.split(u'T')[0]
+                        value = datetime.strptime(value, "%Y-%m-%d").timestamp()
+                        value = datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S.%f')
                 field_values.append(u"{}".format(value))
             else:
                 field_values.append(u"{}".format(getattr(ofbx, fields[k][f_from], u'')))

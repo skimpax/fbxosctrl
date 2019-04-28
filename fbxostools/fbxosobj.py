@@ -106,11 +106,12 @@ table_defs = {
                       'display_name': {u'c_order': 10, u'c_type': u'varchar(80)'},
                       'first_name': {u'c_order': 20, u'c_type': u'varchar(80)'},
                       'last_name': {u'c_order': 30, u'c_type': u'varchar(80)'},
-                      'company': {u'c_order': 40, u'c_type': u'varchar(80)'},
-                      'photo_url': {u'c_order': 50, u'c_type': u'blob'},
-                      'last_update': {u'c_order': 60, u'c_type': u'datetime'},
-                      'notes': {u'c_order': 70, u'c_type': u'varchar(8192)'},
-                      'hostname': {u'c_order': 80, u'c_type': u'varchar(40)'},
+                      'birthday': {u'c_order': 40, u'c_type': u'datetime'},
+                      'company': {u'c_order': 50, u'c_type': u'varchar(80)'},
+                      'photo_url': {u'c_order': 60, u'c_type': u'blob'},
+                      'last_update': {u'c_order': 70, u'c_type': u'datetime'},
+                      'notes': {u'c_order': 80, u'c_type': u'varchar(8192)'},
+                      'hostname': {u'c_order': 90, u'c_type': u'varchar(40)'},
                       }
         },
     u'contact_number': {
@@ -1180,6 +1181,13 @@ class FbxContact(FbxObj):
                 self._display_name = self._data.get('display_name')
                 self._first_name = self._data.get('first_name')
                 self._last_name = self._data.get('last_name')
+                if (self._data.get('birthday') == u'0000-00-00') or (self._data.get('birthday') == u''):
+                    self._birthday = 0.0
+                else:
+                    birthday = self._data.get('birthday')
+                    birthday = birthday.split(u'T')[0]
+                    birthday = datetime.strptime(birthday, "%Y-%m-%d").timestamp()
+                    self._birthday = birthday
                 self._company = self._data.get('company')
                 self._photo_url = self._data.get('photo_url')
                 self._last_update = self._data.get('last_update')
@@ -1220,6 +1228,7 @@ class FbxContact(FbxObj):
                 self._display_name = self._data.display_name
                 self._first_name = self._data.first_name
                 self._last_name = self._data.last_name
+                self._birthday = self._data.birthday
                 self._company = self._data.company
                 self._photo_url = self._data.photo_url
                 self._last_update = self._data.last_update
@@ -1299,6 +1308,18 @@ class FbxContact(FbxObj):
         return self._last_name
 
     @property
+    def birthday(self):
+        return self._birthday
+
+    @property
+    def str_birthday(self):
+        if self._birthday is None:
+            return u''
+        result = datetime.fromtimestamp(
+                self._birthday).strftime('%d-%m-%Y %H:%M:%S')
+        return result
+
+    @property
     def company(self):
         return self._company
 
@@ -1345,10 +1366,15 @@ class FbxContact(FbxObj):
         return self._groups
 
     def __str__(self):
-        result = '{}: dn {}, fn {}, ln {}\n'.format(self.id,
-                                                    self.display_name,
-                                                    self.first_name,
-                                                    self.last_name)
+        if self.str_birthday == u'':
+            birthday = u''
+        else:
+            birthday = u', bday {}'.format(self.str_birthday)
+        result = '{}: dn {}, fn {}, ln {}{}\n'.format(self.id,
+                                                      self.display_name,
+                                                      self.first_name,
+                                                      self.last_name,
+                                                      birthday)
         result += '   cpny {}, updt {}\n'.format(self.company,
                                                  self.str_last_update)
         result += '   notes {}\n'.format(self.notes)
