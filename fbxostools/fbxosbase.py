@@ -695,7 +695,7 @@ class FreeboxOSCtrlBase:
 def main():
 
     from fbxosobj import FbxCalls, FbxCall
-    from fbxosobj import FbxContacts
+    from fbxosobj import FbxContacts, FbxContact
     from fbxosobj import FbxGroups, FbxGroup
     from fbxosobj import FbxDhcpStaticLeases, FbxDhcpStaticLease
     from fbxosobj import FbxDhcpStaticLeasesX, FbxDhcpDynamicLeasesX
@@ -884,7 +884,7 @@ def main():
             print(group)
 
     def test_FbxContact():
-        # FbxContact
+        FbxContact
 
         print(u'\nContacts from freebox:')
         contacts = FbxContacts(ctrl)
@@ -903,11 +903,18 @@ def main():
         print(u'\nSave contacts into database:')
         contacts.save_to_db()
 
-    test_FbxCall()
-    test_FbxDhcpStaticLease()
-    test_FbxDhcpDynamicLease()
-    test_FbxPortForwarding()
-    test_FbxGroup()
+        contacts = FbxContacts(ctrl, empty=True)
+        t_contacts = FbxDbTable(u'contact', u'id', table_defs[u'contact'][u'cols_def'])
+        contacts.load_from_db(ctrl, FbxContact, t_contacts)
+        print(u'\nContacts from database:')
+        for contact in contacts:
+            print(contact)
+
+    # test_FbxCall()
+    # test_FbxDhcpStaticLease()
+    # test_FbxDhcpDynamicLease()
+    # test_FbxPortForwarding()
+    # test_FbxGroup()
     test_FbxContact()
 
     print(u'Seems to be ok')

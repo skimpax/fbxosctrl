@@ -371,7 +371,7 @@ class FbxObjList:
         sql_select = sql_select.format(table_name)
         rows = ctrl.conf._db.query_select(table, sql_select)
         for row in rows:
-            ofbx = self._o_type(self._ctrl, row)
+            ofbx = self._o_type(self._ctrl, row, list=self)
             ofbx._src = 'database'
             self._list.append(ofbx)
         return len(rows)
@@ -1164,6 +1164,9 @@ class FbxContact(FbxObj):
         self._uri = table_defs[self.table_name][u'uri']
         self._cols_def = table_defs[self.table_name][u'cols_def']
         self._table = FbxDbTable(self._table_name, u'id', self._cols_def)
+        self._emails = None
+        self._numbers = None
+        self._urls = None
         # self._init_from_data()
         if self._ctrl is not None:
             self._freebox_address = self._ctrl._conf.freebox_address
@@ -1181,18 +1184,24 @@ class FbxContact(FbxObj):
                 self._photo_url = self._data.get('photo_url')
                 self._last_update = self._data.get('last_update')
                 self._notes = self._data.get('notes')
+
                 if self._data.get('addresses') is not None:
                     self._addresses = FbxAddresses(self._ctrl, data=self._data.get('addresses'))
                 else:
                     self._addresses = []
+
                 if self._data.get('emails') is not None:
                     self._emails = FbxEmails(self._ctrl, data=self._data.get('emails'))
                 else:
-                    self._emails = []
+                    if self._emails is None:
+                        self._emails = []
+
                 if self._data.get('numbers') is not None:
                     self._numbers = FbxNumbers(self._ctrl, data=self._data.get('numbers'))
                 else:
-                    self._numbers = []
+                    if self._numbers is None:
+                        self._numbers = []
+
                 if self._data.get('urls') is not None:
                     self._urls = FbxUrls(self._ctrl, data=self._data.get('urls'))
                 else:
@@ -1206,6 +1215,7 @@ class FbxContact(FbxObj):
                             self._groups.append(fcg)
 
             except AttributeError:
+                # load from db
                 self._id = self._data.id
                 self._display_name = self._data.display_name
                 self._first_name = self._data.first_name
@@ -1214,10 +1224,37 @@ class FbxContact(FbxObj):
                 self._photo_url = self._data.photo_url
                 self._last_update = self._data.last_update
                 self._notes = self._data.notes
-                self._addresses = self._data.addresses
-                self._emails = self._data.emails
-                self._numbers = self._data.numbers
-                self._urls = self._data.urls
+                # self._addresses = self._data.addresses
+                # self._emails = self._data.emails
+                self._emails = FbxEmails(self._ctrl, empty=True)
+                if self._list is not None:
+                    for email in self._list._emails:
+                        if email.contact_id == self._id:
+                            self._emails.append(email)
+                # self._numbers = self._data.numbers
+                self._numbers = FbxNumbers(self._ctrl, empty=True)
+                if self._list is not None:
+                    for number in self._list._numbers:
+                        if number.contact_id == self._id:
+                            self._numbers.append(number)
+                # self._urls = self._data.urls
+                self._urls = FbxUrls(self._ctrl, empty=True)
+                if self._list is not None:
+                    for url in self._list._urls:
+                        if url.contact_id == self._id:
+                            self._urls.append(url)
+                # self._groups
+                self._groups = FbxContactGroups(self._ctrl, empty=True)
+                if self._list is not None:
+                    for group in self._list._cgroups:
+                        if group.contact_id == self._id:
+                            self._groups.append(group)
+                # self._addresses = self._data.addresses
+                self._addresses = FbxAddresses(self._ctrl, empty=True)
+                if self._list is not None:
+                    for address in self._list._addresses:
+                        if address.contact_id == self._id:
+                            self._addresses.append(address)
 
     def save_to_db(self):
         FbxObj.save_to_db(self)
@@ -1348,6 +1385,10 @@ class FbxContacts(FbxObjList):
         self._ol_type = FbxContacts
         self._table_name = u'contact'
         self._uri = '/contact/'
+        self._numbers = None
+        self._emails = None
+        self._cgroups = None
+        self._addresses = None
         self._log = ">>> get_groups"
         self._groups = FbxGroups(ctrl)
         self._log = ">>> get_contact_in_groups"
@@ -1371,12 +1412,41 @@ class FbxContacts(FbxObjList):
                 self._contactGroups.append(cg)
         self._log = ">>> get_contacts"
         # init object list
-        FbxObjList.init_list(self)
+        if empty is False:
+            FbxObjList.init_list(self)
 
     def save_to_db(self):
         FbxObjList.save_to_db(self)
         self._groups.save_to_db()
         self._contactGroups.save_to_db()
+
+    def load_from_db(self, ctrl, O_type, table):
+        # get numbers
+        self._numbers = FbxNumbers(None, empty=True)
+        t_numbers = FbxDbTable(u'contact_number', u'id', table_defs[u'contact_number'][u'cols_def'])
+        self._numbers.load_from_db(ctrl, FbxNumber, t_numbers)
+        # get emails
+        self._emails = FbxEmails(None, empty=True)
+        t_emails = FbxDbTable(u'contact_email', u'id', table_defs[u'contact_email'][u'cols_def'])
+        self._emails.load_from_db(ctrl, FbxEmail, t_emails)
+        # get urls
+        self._urls = FbxUrls(None, empty=True)
+        t_urls = FbxDbTable(u'contact_url', u'id', table_defs[u'contact_url'][u'cols_def'])
+        self._urls.load_from_db(ctrl, FbxUrl, t_urls)
+        # get groups
+        self._groups = FbxGroups(None, empty=True)
+        t_groups = FbxDbTable(u'group', u'id', table_defs[u'group'][u'cols_def'])
+        self._groups.load_from_db(ctrl, FbxGroup, t_groups)
+        # get contact groups
+        self._cgroups = FbxContactGroups(None, empty=True)
+        t_cgroups = FbxDbTable(u'contact_group', u'id', table_defs[u'contact_group'][u'cols_def'])
+        self._cgroups.load_from_db(ctrl, FbxContactGroup, t_cgroups)
+        # get addresses
+        self._addresses = FbxAddresses(None, empty=True)
+        t_addresses = FbxDbTable(u'contact_address', u'id', table_defs[u'contact_address'][u'cols_def'])
+        self._addresses.load_from_db(ctrl, FbxAddress, t_addresses)
+
+        return FbxObjList.load_from_db(self, ctrl, O_type, table)
 
     @property
     def groups(self):
@@ -1409,7 +1479,7 @@ class FbxNumber(FbxObj):
             except AttributeError:
                 self._id = self._data.id
                 self._contact_id = self._data.contact_id
-                self._nbr_type = self._data.type
+                self._nbr_type = self._data.nbr_type
                 self._number = self._data.number
                 self._is_default = self._data.is_default
                 self._is_own = self._data.is_own
@@ -1510,8 +1580,8 @@ class FbxUrl(FbxObj):
             except AttributeError:
                 self._id = self._data.id
                 self._contact_id = self._data.contact_id
-                self._url_type = self._data.type
-                self._url = self._data.urln
+                self._url_type = self._data.url_type
+                self._url = self._data.url
 
     @property
     def id(self):
@@ -1591,7 +1661,7 @@ class FbxEmail(FbxObj):
             except AttributeError:
                 self._id = self._data.id
                 self._contact_id = self._data.contact_id
-                self._url_type = self._data.type
+                self._email_type = self._data.email_type
                 self._email = self._data.email
 
     @property
@@ -1677,7 +1747,7 @@ class FbxAddress(FbxObj):
             except AttributeError:
                 self._id = self._data.id
                 self._contact_id = self._data.contact_id
-                self._address_type = self._data.type
+                self._address_type = self._data.address_type
                 self._number = self._data.number
                 self._street = self._data.street
                 self._street2 = self._data.street2

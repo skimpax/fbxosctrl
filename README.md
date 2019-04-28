@@ -67,7 +67,7 @@ JSON format:
 
 ```bash
 usage: fbxosctrl.py [-h] [--version] [-v] [-j] [-c CONF_PATH] [--save] [--archive]
-                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --dhcpstleases | --pfwd | --clist | --cnew | --contacts | --cread | --reboot | --sinfo | --einfo | --linfo | --dlist | --dspace | --tlist)
+                    (--regapp | --wrstatus | --wron | --wroff | --wpstatus | --wpon | --wpoff | --dhcpleases | --dhcpstleases | --pfwd | --clist | --cnew | --cread | --contacts | --reboot | --sinfo | --einfo | --linfo | --dlist | --dspace | --tlist)
 
 Command line utility to control some FreeboxOS services.
 
@@ -97,9 +97,9 @@ optional arguments:
   --clist       display the list of received calls
                 options [--save, --archive]
   --cnew        display the list of new received calls
-  --contacts    display the list of contacts
-                options [--save]
   --cread       set read status for all received calls
+  --contacts    display the list of contacts
+                options [--save, --archive]
   --reboot      reboot the Freebox Server now!
   --sinfo       display the system information
   --einfo       display the line ethernet information

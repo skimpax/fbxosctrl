@@ -784,6 +784,7 @@ class FbxServicePortForwarding(FbxService):
 
         return tcount > 0
 
+
 class FbxServiceContact(FbxService):
     """Contact"""
 
@@ -796,7 +797,7 @@ class FbxServiceContact(FbxService):
         def load_from_archive(svc):
             contacts = FbxContacts(svc._ctrl, empty=True)
             t_contacts = FbxDbTable(u'contact', u'id', table_defs[u'contact'][u'cols_def'])
-            contacts.load_from_db(svc._ctrl, FbxPortForwarding, t_pfwds)
+            contacts.load_from_db(svc._ctrl, FbxContact, t_contacts)
             return contacts
 
         if self._conf.resp_archive:
