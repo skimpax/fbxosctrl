@@ -15,7 +15,7 @@ except:
     from fbxostools.fbxosdb import FbxDbTable
 
 
-FBXOSDB_VERSION = "1.0.0"
+FBXOSOBJ_VERSION = "1.0.1"
 
 __author__ = "Alain Ferraro (aka afer92)"
 __copyright__ = "Copyright 2019, Alain Ferraro"
@@ -111,7 +111,6 @@ table_defs = {
                       'photo_url': {u'c_order': 60, u'c_type': u'blob'},
                       'last_update': {u'c_order': 70, u'c_type': u'datetime'},
                       'notes': {u'c_order': 80, u'c_type': u'varchar(8192)'},
-                      'hostname': {u'c_order': 90, u'c_type': u'varchar(40)'},
                       }
         },
     u'contact_number': {
