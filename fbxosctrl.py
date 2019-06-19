@@ -1226,7 +1226,7 @@ class FreeboxOSCli:
         del argsdict['restore']
 
         # Set configuration path (local directory by default)
-        conf_path = argsdict.get('conf_path')
+        conf_path = argsdict.get('conf_path')[0]
         if not os.path.isdir(conf_path):
             print('Configuration direcory does not exist: {}'.format(conf_path))
             sys.exit(1)
