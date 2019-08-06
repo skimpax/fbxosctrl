@@ -15,7 +15,7 @@ from zeroconf import Zeroconf
 from datetime import datetime, timedelta
 
 
-FBXOSCTRL_VERSION = "2.4.3"
+FBXOSCTRL_VERSION = "2.4.4"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2019, Christophe Lherieau"
