@@ -50,6 +50,7 @@ class FbxDbLite:
         self._tables = {}
         if os.path.exists(self._db_file):
             self._to_init = False
+            self._to_init = True
             try:
                 self._conn = sqlite3.connect(self._db_file)
                 self._conn.row_factory = sqlite3.Row
@@ -77,6 +78,20 @@ class FbxDbLite:
                     return
             self._conn.commit()
             self._to_init = False
+
+    def query_update_ph(self, db_table, query, values):
+        db_table_name = u'`{}`'.format(db_table.table_name)
+        query = query.format(db_table_name)
+        log('>>> Query: {}'.format(query))
+        try:
+            c = self._conn.cursor()
+            rc = c.execute(query, values)
+            self._conn.commit()
+            c.close()
+        except sqlite3.OperationalError:
+            print(query, u'\n\t', values)
+            return None
+        return rc
 
     def query_update(self, db_table, query):
         db_table_name = u'`{}`'.format(db_table.table_name)
@@ -182,20 +197,88 @@ class FbxDbTable:
             result.append(v[u'c_field'])
         return result
 
+    def primary_keys(self):
+        """ get primary keys """
+        result = []
+        for field, value in self._cols_def.items():
+            if (u'is_id' in value.keys()) and (value[u'is_id']):
+                result.append(u'`{}`'.format(field))
+        return result
+
     def _sql_build_table_create(self):
         """Create sql INSERT or REPLACE with FbxObj properties"""
         fields = self._get_fields_ordered()
-        lines = ["CREATE TABLE `{}` (".format(self.table_name)]
-        for k in sorted(fields.keys()):
-            if fields[k][u'c_field'] == self._id_name:
-                lines.append(u"  `{}` {} PRIMARY KEY,".format(fields[k][u'c_field'], fields[k][u'c_type']))
-            else:
-                lines.append(u"  `{}` {} NOT NULL,".format(fields[k][u'c_field'], fields[k][u'c_type']))
+        p_keys = self.primary_keys()
+        if len(p_keys) > 0:
+            p_keys_str = u','.join(p_keys)
+            p_keys_str = u'  PRIMARY KEY ({})'.format(p_keys_str)
+        else:
+            p_keys_str = u''
 
-        lines.append(u"  `UpdatedInDB` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        lines = ["CREATE TABLE IF NOT EXISTS `{}` (".format(self.table_name)]
+
+        for k in sorted(fields.keys()):
+            lines.append(u"  `{}` {} NOT NULL,".format(fields[k][u'c_field'], fields[k][u'c_type']))
+        if p_keys_str != u'':
+            lines.append(u"  `UpdatedInDB` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,")
+            lines.append(p_keys_str)
+        else:
+            lines.append(u"  `UpdatedInDB` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP")
         lines.append(u");")
 
         return u'\n'.join(lines)
+
+    def sql_build_ph(self, ofbx, replace=False):
+        """Create sql INSERT or REPLACE with FbxObj properties"""
+        str_replace = u'REPLACE' if replace else u'INSERT'
+        field_names = self._get_dbfield_names_ordered()
+        field_values = []
+        field_phs = []
+        fields = self._get_fields_ordered()
+        for k in sorted(fields.keys()):
+            if u'c_name' in fields[k]:
+                f_from = u'c_name'
+            else:
+                f_from = u'c_field'
+
+            field_phs.append(u'?')
+            if fields[k][u'c_type'] in [u'int(11)']:
+                field_values.append(u"{}".format(getattr(ofbx, fields[k][f_from], 0)))
+            elif fields[k][u'c_type'] in [u'tinyint(1)']:
+                value = 1 if getattr(ofbx, fields[k][f_from], 0) else 0
+                field_values.append(u"{}".format(value))
+            elif fields[k][u'c_type'] in [u'datetime']:
+                value = getattr(ofbx, fields[k][f_from], None)
+                if value is None:
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
+                elif value == '0000-01-00':
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
+                elif value == '':
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
+                elif value == 0.0:
+                    # value = datetime.fromtimestamp(0.0).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    value = '1900-01-00'
+                else:
+                    try:
+                        value = datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    except TypeError:
+                        value = value.split(u'T')[0]
+                        value = datetime.strptime(value, "%Y-%m-%d").timestamp()
+                        value = datetime.fromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S.%f')
+                field_values.append(u"{}".format(value))
+            else:
+                field_values.append(u"{}".format(getattr(ofbx, fields[k][f_from], u'')))
+
+        fields = u','.join(field_names)
+        phs = u','.join(field_phs)
+        # Table name not defined here, to be done by caller
+        query = "%s INTO {} (%s) " % (str_replace, fields)
+        query += "VALUES ({});".format(phs)
+        # print(query, field_values)
+        return (query, field_values)
 
     def sql_build(self, ofbx, replace=False):
         """Create sql INSERT or REPLACE with FbxObj properties"""

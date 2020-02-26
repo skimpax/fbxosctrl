@@ -17,6 +17,7 @@ from fbxostools.fbxosbase import log, enable_log, fbx_question_yn
 from fbxostools.fbxosbase import FbxException
 from fbxostools.fbxosobj import table_defs
 from fbxostools.fbxosobj import FbxCall, FbxCalls
+from fbxostools.fbxosobj import FbxContact, FbxContacts
 from fbxostools.fbxosobj import FbxPortForwarding, FbxPortForwardings
 from fbxostools.fbxosobj import FbxDhcpStaticLeasesX, FbxDhcpDynamicLeasesX
 from fbxostools.fbxosobj import FbxDhcpDynamicLease, FbxDhcpStaticLease
@@ -784,6 +785,56 @@ class FbxServicePortForwarding(FbxService):
         return tcount > 0
 
 
+class FbxServiceContact(FbxService):
+    """Contact"""
+
+    def init(self):
+        pass
+
+    def get_contacts(self):
+        """ List the port forwarding on going"""
+
+        def load_from_archive(svc):
+            contacts = FbxContacts(svc._ctrl, empty=True)
+            t_contacts = FbxDbTable(u'contact', u'id', table_defs[u'contact'][u'cols_def'])
+            contacts.load_from_db(svc._ctrl, FbxContact, t_contacts)
+            return contacts
+
+        if self._conf.resp_archive:
+            self._contacts = load_from_archive(self)
+        else:
+            self._contacts = FbxContacts(self._ctrl)
+
+        if len(self._contacts) == 0:
+            print('No port contacts')
+            return 0
+
+        if self._conf.resp_restore:
+            return 0
+
+        if self._conf.resp_as_json is False:
+            print('{} contacts'.format(len(self._contacts)))
+
+        if self._conf.resp_save:
+            # todo : save to archive
+            self._contacts.save_to_db()
+
+        if self._conf.resp_as_json and self._conf.resp_archive is False:
+            return self._contacts.json
+
+        tcount = 0
+
+        log(">>> get_contacts")
+        print(u'Contacts')
+        count = 0
+        for contact in self._contacts:
+            count += 1
+            tcount += 1
+            print(u'{}# {}'.format(count, contact))
+
+        return tcount > 0
+
+
 class FbxServiceCall(FbxService):
     """Call domain"""
 
@@ -922,6 +973,7 @@ class FreeboxOSCtrl:
         self._srv_wifi = FbxServiceWifi(self._http, self._conf)
         self._srv_dhcp = FbxServiceDhcp(self._http, self._conf, self)
         self._srv_call = FbxServiceCall(self._http, self._conf, self)
+        self._srv_contact = FbxServiceContact(self._http, self._conf, self)
         self._srv_pfw = FbxServicePortForwarding(self._http, self._conf, self)
 
     @property
@@ -959,6 +1011,10 @@ class FreeboxOSCtrl:
     @property
     def srv_call(self):
         return self._srv_call
+
+    @property
+    def srv_contact(self):
+        return self._srv_contact
 
     @property
     def srv_port(self):
@@ -1064,6 +1120,11 @@ class FreeboxOSCli:
             action='store_true',
             help='display the list of received calls')
         group.add_argument(
+            '--contacts',
+            default=argparse.SUPPRESS,
+            action='store_true',
+            help='display the list contacts')
+        group.add_argument(
             '--cnew',
             default=argparse.SUPPRESS,
             action='store_true',
@@ -1122,6 +1183,7 @@ class FreeboxOSCli:
             'dhcpstleases': self._ctrl.srv_dhcp.get_static_leases,
             'pfwd': self._ctrl.srv_port.get_port_forwardings,
             'clist': self._ctrl.srv_call.get_all_calls_list,
+            'contacts': self._ctrl.srv_contact.get_contacts,
             'cnew': self._ctrl.srv_call.get_new_calls_list,
             'cread': self._ctrl.srv_call.mark_calls_as_read,
             'reboot': self._ctrl.srv_system.reboot,
