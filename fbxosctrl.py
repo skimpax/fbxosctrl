@@ -294,7 +294,7 @@ class FbxServiceConnection(FbxService):
             print(' - Link:')
             print('   - Tx:  {} dB'.format(resp.result['sfp_pwr_tx']/100))
             print('   - Rx:  {} dB'.format(resp.result['sfp_pwr_rx']/100))
-            
+
         return True
 
 
