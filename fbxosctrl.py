@@ -24,7 +24,7 @@ from fbxostools.fbxosobj import FbxDhcpDynamicLease, FbxDhcpStaticLease
 from fbxostools.fbxosobj import FbxDhcpDynamicLeases, FbxDhcpStaticLeases
 from fbxostools.fbxosdb import FbxDbTable
 
-FBXOSCTRL_VERSION = "2.4.3"
+FBXOSCTRL_VERSION = "2.4.4"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2019, Christophe Lherieau"
@@ -292,9 +292,10 @@ class FbxServiceConnection(FbxService):
         if resp.result['link'] is not True:
             print('   - Link:      {}'.format(resp.result['link']))
         else:
-            print(' - Link:')
-            print('   - Tx:  {} dB'.format(resp.result['sfp_pwr_tx']/100))
-            print('   - Rx:  {} dB'.format(resp.result['sfp_pwr_rx']/100))
+            if 'sfp_pwr_tx' in resp.result.keys():
+                print(' - Link:')
+                print('   - Tx:  {} dB'.format(resp.result['sfp_pwr_tx']/100))
+                print('   - Rx:  {} dB'.format(resp.result['sfp_pwr_rx']/100))
 
         return True
 
