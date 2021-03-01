@@ -24,7 +24,7 @@ from fbxostools.fbxosobj import FbxDhcpDynamicLease, FbxDhcpStaticLease
 from fbxostools.fbxosobj import FbxDhcpDynamicLeases, FbxDhcpStaticLeases
 from fbxostools.fbxosdb import FbxDbTable
 
-FBXOSCTRL_VERSION = "2.4.3"
+FBXOSCTRL_VERSION = "2.4.5"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2019, Christophe Lherieau"
