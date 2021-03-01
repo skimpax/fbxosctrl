@@ -24,7 +24,7 @@ from fbxostools.fbxosobj import FbxDhcpDynamicLease, FbxDhcpStaticLease
 from fbxostools.fbxosobj import FbxDhcpDynamicLeases, FbxDhcpStaticLeases
 from fbxostools.fbxosdb import FbxDbTable
 
-FBXOSCTRL_VERSION = "2.4.4"
+FBXOSCTRL_VERSION = "2.4.3"
 
 __author__ = "Christophe Lherieau (aka skimpax)"
 __copyright__ = "Copyright 2019, Christophe Lherieau"
@@ -276,27 +276,14 @@ class FbxServiceConnection(FbxService):
         if self._conf.resp_as_json:
             return resp.whole_content
 
-        if resp.result['has_sfp'] is not True and resp.result['sfp_present'] is not True:
-            print('No SFP module detected')
-            return False
-
-        print('FTTH info:')
-        print(' - SPF Module:')
-        print('   - Model:     {}'.format(resp.result['sfp_model']))
-        print('   - Vendor     {}'.format(resp.result['sfp_vendor']))
-        print('   - Serial:    {}'.format(resp.result['sfp_serial']))
-        print(' - Status:')
-        print('   - Signal:    {}'.format(resp.result['sfp_has_signal']))
-        print('   - Alim:      {}'.format(resp.result['sfp_alim_ok']))
-        # print('   - Powered:   {}'.format(resp.result['sfp_has_power_report']))
-        if resp.result['link'] is not True:
-            print('   - Link:      {}'.format(resp.result['link']))
-        else:
-            if 'sfp_pwr_tx' in resp.result.keys():
-                print(' - Link:')
-                print('   - Tx:  {} dB'.format(resp.result['sfp_pwr_tx']/100))
-                print('   - Rx:  {} dB'.format(resp.result['sfp_pwr_rx']/100))
-
+        print('Server info:')
+        print(' - Model:     {}'.format(resp.result['model_info']['pretty_name']))
+        print(' - MAC:       {}'.format(resp.result['mac']))
+        print(' - Firmware:  {}'.format(resp.result['firmware_version']))
+        print(' - Uptime:    {}'.format(resp.result['uptime']))
+        print(' - Sensors:')
+        for k, v in resp.result.items():
+            print(' - {:25} {}'.format(k, v))
         return True
 
 
@@ -534,7 +521,7 @@ class FbxServiceDhcp(FbxService):
         # for new call only, we display new calls only
         for st_lease in self._st_leases:
             # if new_only and call.new is False:
-                # continue
+            #     continue
             count += 1
             # st_lease to be displayed
             print(u'{}# {}'.format(count, st_lease))
@@ -819,10 +806,87 @@ class FbxServiceContact(FbxService):
             self._contacts = FbxContacts(self._ctrl)
 
         if len(self._contacts) == 0:
-            print('No port contacts')
-            return 0
+            if not self._conf.resp_restore:
+                print('No port contacts')
+                return 0
 
         if self._conf.resp_restore:
+            self._contacts = FbxContacts(self._ctrl)
+            # clean before populate
+            for contact in self._contacts:
+                data = {}
+                url = u'/contact/{}'.format(contact.id)
+                resp = self._http.delete(url, data=data)
+            self._contacts = load_from_archive(self)
+            i = 0
+            for contact in self._contacts:
+                i += 1
+                # populate
+                data = {u"display_name": contact.display_name,
+                        u"first_name": contact.first_name,
+                        u"last_name": contact.last_name,
+                        u"birthday": contact.birthday,
+                        u"notes": contact.notes,
+                        u"company": contact.company,
+                        u"photo_url": contact.photo_url,
+                        }
+                # print(u'Restore', data)
+                url = u'/contact/'
+                resp = self._http.post(url, data=data)
+                client_id = resp.result['id']
+
+                # print(resp.result)
+                # print(client_id)
+                if not resp.success:
+                    raise FbxException('Request failure: {}'.format(resp))
+                if contact.numbers is not None:
+                    for number in contact.numbers:
+                        # print(u'number: {}'.format(number))
+                        data = {u"contact_id": client_id,
+                                u"number": number.number,
+                                u"type": number.nbr_type,
+                                u"is_default": number.is_default,
+                                u"is_own": number.is_own,
+                                }
+                        url = u'/number/'
+                        resp = self._http.post(url, data=data)
+                        print(resp.result)
+                if contact.addresses is not None:
+                    for address in contact.addresses:
+                        # print(u'address: {}'.format(address))
+                        data = {u"contact_id": client_id,
+                                u"street": address.street,
+                                u"type": address.address_type,
+                                u"city": address.city,
+                                u"zipcode": address.zipcode,
+                                u"number": address.number,
+                                u"country": address.country,
+                                u"street2": address.street2,
+                                }
+                        url = u'/address/'
+                        resp = self._http.post(url, data=data)
+                        print(resp.result)
+                if contact.emails is not None:
+                    for email in contact.emails:
+                        # print(u'email: {}'.format(email))
+                        data = {u"contact_id": client_id,
+                                u"email": email.email,
+                                u"type": email.email_type,
+                                }
+                        url = u'/email/'
+                        resp = self._http.post(url, data=data)
+                        print(resp.result)
+                if contact.urls is not None:
+                    for url in contact.urls:
+                        # print(u'url: {}'.format(url))
+                        data = {u"contact_id": client_id,
+                                u"url": url.url,
+                                u"type": url.url_type,
+                                }
+                        url = u'/url/'
+                        resp = self._http.post(url, data=data)
+                        print(resp.result)
+                # if i > 5: exit(0)
             return 0
 
         if self._conf.resp_as_json is False:
@@ -1256,15 +1320,32 @@ class FreeboxOSCli:
             return self._cmd_handlers.get(cmd, self._parser.print_help)()
 
 
+def main():
+    ctrl = FreeboxOSCtrl()
+    cli = FreeboxOSCli(ctrl)
+
+    args = cli.parse_args(sys.argv[1:])
+
+    want_regapp = True if 'regapp' in args else False
+    ctrl.conf.load(want_regapp)
+
+    rc = cli.dispatch(args)
+
+    sys.exit(rc)
+
+
 if __name__ == '__main__':
-        ctrl = FreeboxOSCtrl()
-        cli = FreeboxOSCli(ctrl)
+    main()
+    """
+    ctrl = FreeboxOSCtrl()
+    cli = FreeboxOSCli(ctrl)
 
-        args = cli.parse_args(sys.argv[1:])
+    args = cli.parse_args(sys.argv[1:])
 
-        want_regapp = True if 'regapp' in args else False
-        ctrl.conf.load(want_regapp)
+    want_regapp = True if 'regapp' in args else False
+    ctrl.conf.load(want_regapp)
 
-        rc = cli.dispatch(args)
+    rc = cli.dispatch(args)
 
-        sys.exit(rc)
+    sys.exit(rc)
+    """
