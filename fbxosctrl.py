@@ -276,14 +276,24 @@ class FbxServiceConnection(FbxService):
         if self._conf.resp_as_json:
             return resp.whole_content
 
-        print('Server info:')
-        print(' - Model:     {}'.format(resp.result['model_info']['pretty_name']))
-        print(' - MAC:       {}'.format(resp.result['mac']))
-        print(' - Firmware:  {}'.format(resp.result['firmware_version']))
-        print(' - Uptime:    {}'.format(resp.result['uptime']))
-        print(' - Sensors:')
-        for k, v in resp.result.items():
-            print(' - {:25} {}'.format(k, v))
+        print('FTTH info:')
+        print(' - SPF Module:')
+        print('   - Model:     {}'.format(resp.result['sfp_model']))
+        print('   - Vendor     {}'.format(resp.result['sfp_vendor']))
+        print('   - Serial:    {}'.format(resp.result['sfp_serial']))
+        print(' - Status:')
+        print('   - Signal:    {}'.format(resp.result['sfp_has_signal']))
+        print('   - Alim:      {}'.format(resp.result['sfp_alim_ok']))
+        print('   - Power rep.:{}'.format(resp.result['sfp_has_power_report']))
+        if resp.result['link'] is not True:
+            print('   - Link:      {}'.format(resp.result['link']))
+        else:
+            if 'sfp_pwr_tx' in resp.result.keys():
+                print(' - Link:')
+                print(resp.result)
+                print('   - Tx:  {} dB'.format(resp.result['sfp_pwr_tx']/100))
+                print('   - Rx:  {} dB'.format(resp.result['sfp_pwr_rx']/100))
+
         return True
 
 
