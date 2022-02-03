@@ -3,13 +3,14 @@ from setuptools import setup, find_packages
 
 setup(
     name='fbxosctrl',
-    version='0.1.5',
+    version='0.1.6',
     # packages=find_packages(exclude=['tests', 'tests.*']),
     package_data={'fbxosctrl': ['py.typed']},
     install_requires=[
         'requests',
         'dicttoxml',
         'xmltodict',
+        'zeroconf',
     ],
     url='https://github.com/afer92/fbxosctrl',
     license='LGPL-3.0 ',
