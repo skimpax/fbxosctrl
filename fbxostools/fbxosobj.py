@@ -1317,8 +1317,11 @@ class FbxContact(FbxObj):
     def str_birthday(self):
         if self._birthday is None:
             return u''
-        result = datetime.fromtimestamp(
-                self._birthday).strftime('%d-%m-%Y %H:%M:%S')
+        try:
+            result = datetime.fromtimestamp(
+                    self._birthday).strftime('%d-%m-%Y %H:%M:%S')
+        except TypeError:
+            return ''
         return result
 
     @property
