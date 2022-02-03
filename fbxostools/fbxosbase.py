@@ -570,7 +570,7 @@ class FbxHttp():
         if self._is_logged_in:
             url = self._conf.api_address('/login/logout/')
             # resp = self._http.post(url, headers=self.headers)
-            resp = self.post(url, headers=self.headers)
+            resp = self.post(url)
 
             # reset headers as no more dialogs expected
             # self._http_headers = None
