@@ -1190,7 +1190,7 @@ class FbxContact(FbxObj):
                     except ValueError:
                         birthday = 0.0
                     self._birthday = birthday
-                    self._company = self._data.get('company')
+                self._company = self._data.get('company')
                 self._photo_url = self._data.get('photo_url')
                 self._last_update = self._data.get('last_update')
                 self._notes = self._data.get('notes')
